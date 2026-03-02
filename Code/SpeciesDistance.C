@@ -42,7 +42,6 @@ SpeciesDistance::setProot(double aVal)
     return 0;
 }
 
-
 int
 SpeciesDistance::setspeciesNameIDMap(unordered_map<string,int>& spNameIDMap){
     speciesNameIDMap=spNameIDMap;
@@ -53,8 +52,6 @@ SpeciesDistance::readSpeciesTree(const char* aFName)
 {
 	ifstream inFile(aFName);
 	char buffer[1024];
-	//double p_gain = pgain;
-	//double p_maintain_edge = pmaintain;
 	while(inFile.good())
 	{
 		inFile.getline(buffer,1023);
@@ -70,7 +67,6 @@ SpeciesDistance::readSpeciesTree(const char* aFName)
 		int tokCnt=0;
 		string childSpeciesName;
 		string parentSpeciesName;
-		//string childtype;
 		double p_gain=0;
 		double p_maintain_edge=0;
         while(tok!=NULL)
@@ -129,197 +125,95 @@ SpeciesDistance::readSpeciesTree(const char* aFName)
         parentSpecies->children.push_back(childSpecies);
         cout << "("<<childSpeciesName << "|" << parentSpeciesName << ") p_maintain_edge=" << p_maintain_edge << " p_gain=" << p_gain << endl;
 	}
-        cout <<"speciesSet.size()=" <<speciesSet.size() << " Root is " << root->name << endl;
+    cout <<"speciesSet.size()=" <<speciesSet.size() << " Root is " << root->name << endl;
 	inFile.close();
 	return 0;
 }
 
-
-//The probability that an edge is maintained in a child given that the edge is present in the ancestor
-double 
-SpeciesDistance::getProbGainGain(string& spName)
-{
-	/*if(speciesSet.find(spName)==speciesSet.end())
-	{
-		cout <<"No species with name " << spName.c_str() << endl;
-		exit(0);
-	}*/
-	Species* species=speciesSet[spName];
-	double gain_gain=species->p_maintain_edge;
-	return gain_gain;
+// Returns the probability of a child status given a parent status, based on the gain and maintain probabilities on the child species.
+static double
+getParentChildEdgeStatusProb(SpeciesDistance::Species *childSpecies, int parentStatus, int childStatus) {
+    if (parentStatus == 0 && childStatus == 0)
+    {
+        return 1 - childSpecies->p_gain;
+    }
+    else if (parentStatus == 0 && childStatus == 1)
+    {
+        return childSpecies->p_gain;
+    }
+    else if (parentStatus == 1 && childStatus == 0)
+    {
+        return 1 - childSpecies->p_maintain_edge;
+    }
+    else
+    {
+        return childSpecies->p_maintain_edge;
+    }
 }
 
-//The probability that an edge is gained in a child given that the edge is absent in the ancestor
-double 
-SpeciesDistance::getProbGainLoss(string& spName)
-{
-	/*if(speciesSet.find(spName)==speciesSet.end())
-	{
-		cout <<"No species with name " << spName.c_str() << endl;
-		exit(0);
-	}*/
-	Species* species=speciesSet[spName];
-	double gain_loss=species->p_gain;
-	return gain_loss;
+// Creates a unique integer key for a configuration of n edge statuses, by interpreting a present edge as a 1 and an absent
+// edge as a 0 in an n digit binary number.
+static int
+createBinaryKeyWithEdgeStatus(vector<int>& edgeStatus) {
+    int binaryKey = 0;
+    int position = 0;
+    for(int eIter=0; eIter < edgeStatus.size(); eIter++)
+    {
+        if(edgeStatus[eIter] != 0)
+        {
+            binaryKey += (int)pow(2, position);
+        }
+        position += 1;
+    }
+    return binaryKey;
 }
 
-//The probability than an edge is lost in a child given that the edge was present in the ancestor
-double 
-SpeciesDistance::getProbLossGain(string& spName)
-{
-	/*if(speciesSet.find(spName)==speciesSet.end())
-	{
-		cout <<"No species with name " << spName.c_str() << endl;
-		exit(0);
-	}*/
-	Species* species=speciesSet[spName];
-	double loss_gain=1-species->p_maintain_edge;
-	return loss_gain;
-}
-
-//The  probability that an edge is lost in a child given the edge was absent in the ancestor
-double 
-SpeciesDistance::getProbLossLoss(string& spName)
-{
-	/*if(speciesSet.find(spName)==speciesSet.end())
-	{
-		cout <<"No species with name " << spName.c_str() << endl;
-		exit(0);
-	}*/
-	Species* species=speciesSet[spName];
-	double loss_loss=1-species->p_gain;
-	return loss_loss;
-}
-
-// new getEdgeStatusProb by Shilu
+// Returns the probability of an edge having a particular configuration of statuses across species.
 double
 SpeciesDistance::getEdgeStatusProb(vector<int>& edgeStatus)
 {
-    /*cout << "Edge status: ";
-    for(map<string,int>::iterator eIter=edgeStatus.begin();eIter!=edgeStatus.end();eIter++)
+    // If the probability is already cached, return it.
+    int binary_key = createBinaryKeyWithEdgeStatus(edgeStatus);
+    if(binEdgeKeyProbMap.find(binary_key) != binEdgeKeyProbMap.end())
     {
-        cout <<eIter->first <<"=" << eIter->second <<"| " ;
-    }*/
-    double edgeprior=0;
-    int binkey=0;
-    int binpos=0;
-    for(int eIter=0;eIter<edgeStatus.size();eIter++)
-    {
-        if(edgeStatus[eIter]!=0)
-        {
-            int val=(int)pow(2,binpos);
-            binkey=binkey+val;
-        }
-        binpos=binpos+1;
-    }
-    if(binEdgeKeyProbMap.find(binkey)!=binEdgeKeyProbMap.end())
-    {
-        return binEdgeKeyProbMap[binkey];
+        return binEdgeKeyProbMap[binary_key];
     }
 
-    /*cout << "binkey=" << binkey << " [Edge status: ";
-    for(int eIter=0;eIter<edgeStatus.size();eIter++)
+    // Start with the probability of the root status.
+    double edgeStatusProb = (edgeStatus[0] == 0) ? 1 - proot : proot;
+
+    // Multiply by the probabilities of the edge assignment in all children.
+    for(int i = 0; i < root->children.size(); i++)
     {
-        cout <<edgeStatus[eIter] <<" ";
+        double childrenScore = getSubTreeProb(edgeStatus[0], root->children[i], edgeStatus);
+        edgeStatusProb *= childrenScore;
     }
-    cout << "] " ; */
-    //Start with the root
-    //changed 6/4 to test setting the prior probability of an edge in the root node = .2
-    double score;
-    if(edgeStatus[0]==0)
-    {
-        score = 1-proot;
-    }
-    else
-    {
-        score = proot;
-    }
-    edgeprior=score;
-    //cout << "P(G)=P(" << root->name <<"=" <<edgeStatus[0] <<")[" << score <<"]";
-    for(int i=0;i<root->children.size();i++)
-    {
-        double childrenScore=getSubTree(edgeStatus[0],root->children[i],edgeStatus);
-        edgeprior=edgeprior*childrenScore;
-        //cout << " * P(" << root->children[i]->name <<"=" <<edgeStatus[speciesNameIDMap[root->children[i]->name]] <<"|" << root->name <<"=" <<edgeStatus[0] << ")[" <<  childrenScore << "]";
-    }
-    //cout << "=" << edgeprior << endl;
-    binEdgeKeyProbMap[binkey]=edgeprior;
-    return edgeprior;
+
+    binEdgeKeyProbMap[binary_key] = edgeStatusProb;
+
+    return edgeStatusProb;
 }
 
-
-// new getSubTree function by Shilu
+// Returns the probability of an edge having a particular configuration of statuses across a subtree of species.
 double
-SpeciesDistance::getSubTree(bool parentEdge, Species* child, vector<int>& edgeStatus)
+SpeciesDistance::getSubTreeProb(bool parentStatus, Species* child, vector<int>& edgeStatus)
 {
-    double score=0;
-    int status=edgeStatus[speciesNameIDMap[child->name]];
+    int childStatus = edgeStatus[speciesNameIDMap[child->name]];
 
+    double score = getParentChildEdgeStatusProb(child, parentStatus, childStatus);
+
+    // If the child is a leaf, just return its own score
     if(child->children.empty())
     {
-        //This is a leaf node
-        if(parentEdge)
-        {
-            if(status==0)
-            {
-                score=getProbLossGain(child->name);
-            }
-            else
-            {
-                score=getProbGainGain(child->name);
-            }
-        }
-        else
-        {
-            if(status==0)
-            {
-                score=getProbLossLoss(child->name);
-            }
-            else
-            {
-                score=getProbGainLoss(child->name);
-            }
-        }
-        //cout << "&&&&Reach LeafNode! P(" << child->name << "=" << status <<"|" <<child->parent->name << "=" <<  parentEdge << ")= " << score <<endl;
+        return score;
     }
-    else
-    {
-        //This is a parent node
 
-        // its own score:
-        if(edgeStatus[speciesNameIDMap[child->parent->name]])
-        {
-            if(status==0)
-            {
-                score=getProbLossGain(child->name);
-            }
-            else
-            {
-                score=getProbGainGain(child->name);
-            }
-        }
-        else
-        {
-            if(status==0)
-            {
-                score=getProbLossLoss(child->name);
-            }
-            else
-            {
-                score=getProbGainLoss(child->name);
-            }
-        }
-        //cout << "Current " << child->name << " score=" << score << endl;
-        //cout << " * P(" << child->name <<"=" <<edgeStatus[child->name] <<"|" << child->parent->name <<"=" <<edgeStatus[child->parent->name] << ")" ;
-        // children score
-        for(int i=0;i<child->children.size();i++)
-        {
-            // edgeStatus[child->name] status for current node, i.e. parent edge status for children
-            double childrenScore=getSubTree(edgeStatus[speciesNameIDMap[child->name]],child->children[i],edgeStatus);
-            score=score*childrenScore;
-            //cout << " * P(" << child->children[i]->name <<"=" <<edgeStatus[speciesNameIDMap[child->children[i]->name]] <<"|" << child->name <<"=" <<edgeStatus[speciesNameIDMap[child->name]] << ")" ;
-        }
+    // If it's not a leaf, multiply score by the scores of its children.
+    for(int i = 0; i < child->children.size(); i++)
+    {
+        score *= getSubTreeProb(childStatus, child->children[i], edgeStatus);
     }
+
     return score;
 }
 
