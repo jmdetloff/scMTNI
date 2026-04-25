@@ -9,22 +9,18 @@ using namespace std;
 
 class Error;
 class Variable;
+
 class VariableManager
 {
 	public:
-		VariableManager();
-		~VariableManager();
-		Error::ErrorCode readVariables(const char*);
 		int getVarID(const char*);
-		bool isValid(int,int);
-		vector<Variable*>& getVariableSet(); //map<int,Variable*>& getVariableSet();
+		vector<Variable*>& getVariableSet();
 		Variable* getVariableAt(int);
-
 		Error::ErrorCode readVariablesFromTable(vector<string>&);
         Error::ErrorCode readVariablesFromData(string,int);
+
 	private:
 		unordered_map<string,int> varNameIDMap;
-		vector<Variable*> variableSet;//map<int,Variable*> variableSet;
-		//int globalVarId;
+		vector<Variable*> variableSet;
 };
 #endif

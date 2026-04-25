@@ -57,7 +57,6 @@ Framework::~Framework()
 //We will use getopt here
 //The options are 
 //-m modelname
-//-o outputdir
 //-e epsilon to control the number of standard deviations above random
 //-k maxfactorsize
 //-s number of samples for approximate information estimation
@@ -72,7 +71,7 @@ Framework::init(int argc, char** argv)
     int oldoptind=optind;
     char orthoMapFName[1024];
     char speciesOrder[1024];
-    while(optret=getopt(argc,argv,"f:k:x:p:t:v:l:i:c:o:g:r:d:m:s:n:b:q:")!=-1)
+    while(optret=getopt(argc,argv,"f:k:x:p:t:v:l:i:c:g:r:d:m:s:n:b:q:")!=-1)
     {
         if(optret=='?')
         {
@@ -109,11 +108,10 @@ Framework::init(int argc, char** argv)
                 metaLearner.setMaxFactorSize_Approx(aSize);
                 break;
             }
-            case 'p':  //update by Shilu to set p(root=1)
+            case 'p':
             {
                 double proot=atof(my_optarg);
                 spData.setProot(proot);
-                //metaLearner.setPenalty(penalty);
                 break;
             }
             case 't':
@@ -132,23 +130,6 @@ Framework::init(int argc, char** argv)
             case 'l':
             {
                 metaLearner.setRestrictedList(my_optarg);
-                break;
-            }
-            case 'o':
-            {
-                if(strcmp(my_optarg,"entropy")==0)
-                {
-                    metaLearner.setScoreOpt_Entropy();
-                }
-                else if(strcmp(my_optarg,"pll")==0)
-                {
-                    metaLearner.setScoreOpt_PLL();
-                }
-                else
-                {
-                    cout <<"Undefined score type "<< endl;
-                    return Error::UNKNOWN;
-                }
                 break;
             }
             case 'g':
@@ -267,7 +248,6 @@ main(int argc, char* argv[])
         << "-t convergence_threshold" << endl
         << "-v cross_validation_cnt" << endl
         << "-l restrictedfname" << endl
-        << "-o optimizationcrit" <<  endl
         << "-g knowngraph" << endl
         << "-r randomseed" << endl
         << "-d distancematrix" << endl

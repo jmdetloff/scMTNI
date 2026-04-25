@@ -49,11 +49,6 @@ using namespace std;
 MetaLearner::MetaLearner()
 {
     restrictedFName[0] = '\0';
-    lambdaLearnSize = 0;
-    learnLambda = false;
-    dataPool = false;
-    usePLL = true;
-    useEntropy = true;
     trueGraphFName[0] = '\0';
     preRandomizeSplit = false;
     preRandSeed = -1;
@@ -88,18 +83,6 @@ int MetaLearner::setMaxFactorSize(int aVal)
 int MetaLearner::setMaxFactorSize_Approx(int aVal)
 {
     maxFactorSizeApprox = aVal;
-    return 0;
-}
-
-int MetaLearner::setMBCntForApproxGreedy(int aCnt)
-{
-    maxMBCntGreedy = aCnt;
-    return 0;
-}
-
-int MetaLearner::setPenalty(double aVal)
-{
-    penalty = aVal;
     return 0;
 }
 
@@ -144,18 +127,6 @@ int MetaLearner::setRestrictedList(const char *aFName)
     return 0;
 }
 
-int MetaLearner::setLambdaLearnSize(int vSize)
-{
-    lambdaLearnSize = vSize;
-    return 0;
-}
-
-int MetaLearner::setLambdaLearn()
-{
-    learnLambda = true;
-    return 0;
-}
-
 int MetaLearner::setTrueGraph(const char *aGraphName)
 {
     strcpy(trueGraphFName, aGraphName);
@@ -171,20 +142,6 @@ int MetaLearner::setPreRandomizeSplit()
 int MetaLearner::setPreRandomizeSplitSeed(int seed)
 {
     preRandSeed = seed;
-    return 0;
-}
-
-int MetaLearner::setScoreOpt_Entropy()
-{
-    usePLL = false;
-    useEntropy = true;
-    return 0;
-}
-
-int MetaLearner::setScoreOpt_PLL()
-{
-    usePLL = true;
-    useEntropy = false;
     return 0;
 }
 
@@ -229,19 +186,6 @@ int MetaLearner::setBeta1(double b1)
     return 0;
 }
 
-/*int
-MetaLearner::setEdgePrior_PerSpecies()
-{
-    edgePresenceProb=1/(1+exp(-1*beta1));
-    if(edgePresenceProb<1e-50){
-        edgePresenceProb=1e-50;
-    }else if(edgePresenceProb>1-1e-50){
-        edgePresenceProb=1-1e-50;
-    }
-    cout <<"Edge Specific Prior=" << edgePresenceProb << endl;
-    return 0;
-}*/
-
 int MetaLearner::setBeta2(double b2)
 {
     beta2 = b2;
@@ -279,7 +223,6 @@ int MetaLearner::init_onefold()
         setinputVariableNames();
     }
     // set sparsity prior: edgePresenceProb
-    // setEdgePrior_PerSpecies();
     map<int, MappedOrthogroup *> &orthogroupSet = ogr->getMappedOrthogroups();
     while (inFile.good())
     {
@@ -545,7 +488,6 @@ int MetaLearner::doCrossValidation(int foldCnt)
             sprintf(foldOutputDirCmd, "mkdir -p %s", outputDir);
             system(foldOutputDirCmd);
         }
-        // clearFoldSpecData();
         initEdgeSet(); // need to double check for cross-validation with more folds (moved from start(f));
         initGlobalScore = getInitScore();
         start(f);
@@ -636,9 +578,6 @@ int MetaLearner::start(int f)
             cout << endl;
         }*/
     }
-    // precomputePerSpeciesPrior();
-    // initEdgeSet();
-    // initEdgeSet_onefold();
     cout << "inputRegulatorOGs.size() = " << inputRegulatorOGs.size() << " inputOGList.size() = " << inputOGList.size() << endl;
 
     if (strlen(trueGraphFName) == 0)
@@ -659,7 +598,6 @@ int MetaLearner::start(int f)
             {
                 collectMoves_Orthogroups_INDEP(currK);
             }
-            // sortMoves();  //not needed
             int successMove = 0;
             double diff = makeMoves(successMove); // diff=sum of move->getScoreImprovement(), which is equal to getScore()-currGlobalScore;
             /*if(currGlobalScore==-1)
@@ -672,9 +610,6 @@ int MetaLearner::start(int f)
             {
                 priorChange = getPriorDelta();
             }
-            // collectMoves_Deletions();
-            // sortMoves();
-            // makeDelMoves();
             // priorChange=getPriorDelta();
             double newScore = currGlobalScore + diff; // getScore();
             // newScore=newScore+initPrior+priorChange;
@@ -788,31 +723,12 @@ MetaLearner::getPriorDelta()
     return priorDelta;
 }
 
-int MetaLearner::clearFoldSpecData()
-{
-    // Clear existing graphs
-    // for(map<string,SpeciesDataManager*>::iterator fIter=speciesDataSet.begin();fIter!=speciesDataSet.end();fIter++)
-    for (int i = 0; i < speciesDataSet.size(); i++)
-    {
-        delete speciesDataSet[i]; // fIter->second;
-    }
-    speciesDataSet.clear();
-    return 0;
-}
-
 int MetaLearner::initEdgeSet()
 {
 
     if (condsetMap.size() == 0)
     {
-        /*if(dataPool)
-        {
-            initCondsetMap();
-        }
-        else
-        {*/
         initCondsetMap_Nopool();
-        //}
     }
     // initCondsetMap_Tree(speciesData->getRoot());
 
@@ -838,47 +754,6 @@ int MetaLearner::initEdgeSet()
             sFactor->mbScore = pll; // pll+priorScore;
             // sFactor->marginalLL=pll;//pll+priorScore;
         }
-    }
-    return 0;
-}
-
-int MetaLearner::initEdgeSet_onefold()
-{
-    cout << "initEdgeSet_onefold" << endl;
-    initCondsetMap_Nopool();
-    initCondsetMap_Tree(speciesData->getRoot());
-    /*cout << "condsetMap_Tree" << endl;
-    for (int setIter = 0; setIter < condsetMap_Tree.size(); setIter++)
-    {
-        // INTINTMAP* cset=setIter->second;
-        vector<int> &cset = condsetMap_Tree[setIter];
-        cout << setIter;
-        for (auto cIter = 0; cIter < cset.size(); cIter++)
-        {
-            cout << " " << cIter << "=" << cset[cIter];
-        }
-        cout << endl;
-    }*/
-    // for(map<string,SpeciesDataManager*>::iterator eIter=speciesDataSet.begin();eIter!=speciesDataSet.end();eIter++)
-    for (int i = 0; i < speciesDataSet.size(); i++)
-    {
-        SpeciesDataManager *spd = speciesDataSet[i];
-        FactorGraph *condspecGraph = spd->getFactorGraph();
-        PotentialManager *potMgr = spd->getPotentialManager();
-        // int specID=speciesNameIDMap[eIter->first];
-        for (int f = 0; f < condspecGraph->getFactorCnt(); f++)
-        {
-            SlimFactor *sFactor = condspecGraph->getFactorAt(f);
-            // double pll=getPLLScore_Condition_onefold((string&)eIter->first,sFactor);
-            // VariableManager* varMgr=spd->getVariableManager();
-            // VSET& varSet=varMgr->getVariableSet();
-            double pll = potMgr->computeMeanVarPseudoLikelihood_onefold(sFactor->fId);
-            sFactor->mbScore = pll; // pll+priorScore;
-            // sFactor->marginalLL=pll;//pll+priorScore;
-        }
-        // EvidenceManager* evMgr=spd->getEvidenceManager();
-        // evMgr->deleteData();
-        // potMgr->deleteData();
     }
     return 0;
 }
@@ -930,149 +805,6 @@ MetaLearner::precomputeEmptyGraphPrior()
     return emptyGraphPrior;
 }
 
-/*
-// compute ogpairPrior
-double
-MetaLearner::precomputeEmptyGraphPrior()
-{
-    map<string,int> ogpairEdgeCntMap;
-    map<int,int> ogMaxSpecCnt_TF;
-    map<int,int> ogMaxSpecCnt_Tgt;
-    STRINTMAP edgeStatus;
-    for(map<string,SpeciesDataManager*>::iterator sIter=speciesDataSet.begin();sIter!=speciesDataSet.end();sIter++)
-    {
-        SpeciesDataManager* sdm=sIter->second;
-        VariableManager* vMgr=sdm->getVariableManager();
-        VSET& varSet=vMgr->getVariableSet();
-        map<string,int>& regulators=sdm->getRegulators();
-        map<string,int>& targets=sdm->getTargets();
-        for(VSET_ITER vIter=varSet.begin();vIter!=varSet.end();vIter++)
-        {
-            Variable* v=vIter->second;
-            if(targets.size()>0 && (targets.find(v->getName())==targets.end()))
-            {
-                continue;
-            }
-            int ogno_tgt=ogr->getMappedOrthogroupID(v->getName().c_str(),sIter->first.c_str());
-            if(inputOGList.find(ogno_tgt) == inputOGList.end())
-            {
-                continue;
-            }
-            if(ogno_tgt==-1)
-            {
-            //cout <<"No Orthogroup for " << v->getName() << " species " << sIter->first << endl;
-                continue;
-            }
-            MappedOrthogroup* ogrp_Tgt=ogr->getMappedOrthogroup(v->getName().c_str(),sIter->first.c_str());
-            if(ogrp_Tgt==NULL)
-            {
-                cout <<"No target by name " << v->getName() << " in " << sIter->first << endl;
-            }
-            GeneMap* gmap=ogrp_Tgt->getSpeciesHits(sIter->first.c_str());
-            map<string,map<string,STRINTMAP*>*>& targetsInSpec=gmap->getGeneSet();
-            int targetsWithVals=0;
-            for(map<string,map<string,STRINTMAP*>*>::iterator tIter=targetsInSpec.begin();tIter!=targetsInSpec.end();tIter++)
-            {
-                if(vMgr->getVarID(tIter->first.c_str())==-1)
-                {
-                    continue;
-                }
-                targetsWithVals++;
-            }
-            if(ogMaxSpecCnt_Tgt.find(ogno_tgt)==ogMaxSpecCnt_Tgt.end())
-            {
-                ogMaxSpecCnt_Tgt[ogno_tgt]=targetsWithVals;
-            }
-            else
-            {
-                int currval=ogMaxSpecCnt_Tgt[ogno_tgt];
-                if(currval<targetsWithVals)
-                {
-                    ogMaxSpecCnt_Tgt[ogno_tgt]=targetsWithVals;
-                }
-            }
-            //Now we need to figure out how many edges this ogno_tgt-ogno_tf pair is going to contribute to
-            //This is essentially the max number of active targets
-            for(map<string,int>::iterator rIter=regulators.begin();rIter!=regulators.end();rIter++)
-            {
-                int regID=vMgr->getVarID(rIter->first.c_str());
-                if(regID==-1)
-                {
-                    continue;
-                }
-                int ogno_tf=ogr->getMappedOrthogroupID(rIter->first.c_str(),sIter->first.c_str());
-                if(ogno_tf==-1)
-                {
-                    cout <<"No Orthogroup for " <<rIter->first << " species " << sIter->first << endl;
-                    continue;
-                }
-                MappedOrthogroup* ogrp_TF=ogr->getMappedOrthogroup(rIter->first.c_str(),sIter->first.c_str());
-                if(ogrp_TF==NULL)
-                {
-                    cout <<"No gene " << rIter->first << " in " << sIter->first << endl;
-                    continue;
-                }
-                char key[1024];
-                sprintf(key,"%d-%d",ogno_tf,ogno_tgt);
-                string keystr(key);
-                if(edgeConditionMap.find(keystr)==edgeConditionMap.end())
-                {
-                    INTINTMAP* edgeSpecAssign=new INTINTMAP;
-                    for(map<string,int>::iterator tIter=speciesNameIDMap.begin();tIter!=speciesNameIDMap.end();tIter++)
-                    {
-                        (*edgeSpecAssign)[tIter->second]=0;
-                    }
-                    edgeConditionMap[keystr]=edgeSpecAssign;
-                }
-                GeneMap* tfgenemap=ogrp_TF->getSpeciesHits(sIter->first.c_str());
-                map<string,map<string,STRINTMAP*>*>& tfsInSpec=tfgenemap->getGeneSet();
-                int tfsWithVals=0;
-                for(map<string,map<string,STRINTMAP*>*>::iterator tIter=tfsInSpec.begin();tIter!=tfsInSpec.end();tIter++)
-                {
-                    if(vMgr->getVarID(tIter->first.c_str())==-1)
-                    {
-                        continue;
-                    }
-                    tfsWithVals++;
-                }
-                if(ogMaxSpecCnt_TF.find(ogno_tf)==ogMaxSpecCnt_TF.end())
-                {
-                    ogMaxSpecCnt_TF[ogno_tf]=tfsWithVals;
-                }
-                else
-                {
-                    int currval=ogMaxSpecCnt_TF[ogno_tf];
-                    if(currval<tfsWithVals)
-                    {
-                        ogMaxSpecCnt_TF[ogno_tf]=tfsWithVals;
-                    }
-                }
-            }
-
-        }
-        edgeStatus[sIter->first]=0;
-    }
-    double prior=speciesData->getEdgeStatusProb(edgeStatus);
-    double logPrior=log(prior);
-    int edgeCnt=0;
-    cout << "Compute ogpairPrior! ogMaxSpecCnt_TF.size=" << ogMaxSpecCnt_TF.size() << " ogMaxSpecCnt_Tgt.size="<< ogMaxSpecCnt_Tgt.size() << endl;
-    for(map<int,int>::iterator tfIter=ogMaxSpecCnt_TF.begin();tfIter!=ogMaxSpecCnt_TF.end();tfIter++)
-    {
-        for(map<int,int>::iterator tgtIter=ogMaxSpecCnt_Tgt.begin();tgtIter!=ogMaxSpecCnt_Tgt.end();tgtIter++)
-        {
-            edgeCnt=edgeCnt+(tfIter->second*tgtIter->second);
-            char key[1024];
-            sprintf(key,"%d-%d",tfIter->first,tgtIter->first);
-            string keystr(key);
-            ogpairPrior[keystr]=logPrior;
-            cout << "ogpairPrior["<< keystr <<"]=" << logPrior <<endl;
-        //cout <<"ogMaxSpecCnt_TF[" <<tfIter->first << "]=" << tfIter->second << " ogMaxSpecCnt_Tgt[" <<tgtIter->first << "]=" <<tgtIter->second << endl;
-        }
-    }
-    double emptyGraphPrior=edgeCnt*logPrior;
-    return emptyGraphPrior;
-}*/
-
 // Shilu: compute varNeighborhoodPrior_PerSpecies[specID][targeti]: set to 0
 // edgePresenceProb is the same for CVN for each edge per cell, so no need to store into a map
 // targetID is variable ID
@@ -1107,270 +839,6 @@ MetaLearner::precomputePerSpeciesPrior(int specID, int targetID, Variable *targe
     //cout << spec << "target=" << target->getName() << " NeighborhoodPrior=" << NeighborhoodPrior << endl;
     return NeighborhoodPrior;
 }
-
-/*int
-MetaLearner::precomputePerSpeciesPrior()
-{
-    for(map<string,SpeciesDataManager*>::iterator sIter=speciesDataSet.begin();sIter!=speciesDataSet.end();sIter++)
-    {
-        SpeciesDataManager* sdm=sIter->second;
-        VariableManager* vMgr=sdm->getVariableManager();
-        VSET& varSet=vMgr->getVariableSet();
-        map<string,int>& regulators=sdm->getRegulators();
-        map<string,int>& targets=sdm->getTargets();
-        map<string,double>* edgePresenceProb=new map<string,double>;
-        edgePresenceProb_PerSpecies[sIter->first]=edgePresenceProb;
-        map<int,double>* varNeighborhoodPrior=new map<int,double>;
-        varNeighborhoodPrior_PerSpecies[sIter->first]=varNeighborhoodPrior;
-
-        for(VSET_ITER vIter=varSet.begin();vIter!=varSet.end();vIter++)
-        {
-            Variable* v=vIter->second;
-            if(targets.size()>0 && (targets.find(v->getName())==targets.end()))
-            {
-                continue;
-            }
-            //Now we need to figure out how many edges this ogno_tgt-ogno_tf pair is going to contribute to
-            //This is essentially the max number of active targets
-            for(map<string,int>::iterator rIter=regulators.begin();rIter!=regulators.end();rIter++)
-            {
-                int regID=vMgr->getVarID(rIter->first.c_str());
-                if(regID==-1)
-                {
-                    continue;
-                }
-                string edgeKey;
-                edgeKey.append(rIter->first.c_str());
-                edgeKey.append("\t");
-                edgeKey.append(v->getName().c_str());
-                double initPrior=getEdgePrior_PerSpecies(regID,vIter->first,sdm);
-                (*edgePresenceProb)[edgeKey]=initPrior;
-                if(varNeighborhoodPrior->find(vIter->first)==varNeighborhoodPrior->end())
-                {
-                    (*varNeighborhoodPrior)[vIter->first]=log(1-initPrior);
-                }
-                else
-                {
-                    (*varNeighborhoodPrior)[vIter->first]=(*varNeighborhoodPrior)[vIter->first]+log(1-initPrior);
-                }
-            }
-        }
-    }
-
-    return 0;
-}*/
-
-/*
-int
-MetaLearner::initCondsetMap()
-{
-    int lastcondind=(int)pow(2,speciesDataSet.size());
-    for(int i=1;i<lastcondind;i++)
-    {
-        INTINTMAP* cset=new INTINTMAP;
-        int currind=i;
-        for(map<int,string>::iterator eIter=speciesIDNameMap.begin();eIter!=speciesIDNameMap.end();eIter++)
-        {
-            if(currind==0)
-            {
-                (*cset)[eIter->first]=0;
-                continue;
-            }
-            if((currind%2)==1)
-            {
-                (*cset)[eIter->first]=1;
-            }
-            else
-            {
-                (*cset)[eIter->first]=0;
-            }
-            currind=currind/2;
-        }
-        condsetMap[i]=cset;
-        string condKey;
-        genCondSetKey(*cset,condKey);
-        condsetKeyIDMap[condKey]=i;
-        condsetIDKeyMap[i]=condKey;
-    }
-    return 0;
-}*/
-
-/*
-// update by Shilu Oct4 2019: consider all combinations, no restrictions.
-int
-MetaLearner::initCondsetMap_TreeAll(SpeciesDistance::Species* node)
-{
-    int npos=pow(2,speciesIDNameMap.size());
-    vector<vector<int> > mycondition;
-    for(int j=0;j<speciesIDNameMap.size();j++)  //(map<string,int> speciesNameIDMap
-    {
-        mycondition.resize(pow(2,j+1));
-        if(j==0)
-        {
-            mycondition[0].push_back(0);
-            mycondition[1].push_back(1);
-        }else{
-            vector<vector<int> > temp;
-            for (int r = 0; r < mycondition.size(); r++) {
-                vector<int> temp1(mycondition[r]);
-                temp1.push_back(0);
-                temp.push_back(temp1);
-                vector<int> temp2(mycondition[r]);
-                temp2.push_back(1);
-                temp.push_back(temp2);
-            }
-            for (int r = 0; r < mycondition.size(); r++) {
-                mycondition[r]=temp[r];
-            }
-        }
-    }
-c
-    return 0;
-}*/
-
-/*
-int
-MetaLearner::initCondsetMap_Tree(SpeciesDistance::Species* node)
-{
-    //reach leaves
-    if(node->children.empty())
-    {
-        vector<int> cset;
-        //map<int,int>* cset=new map<int,int>;
-        int specID=speciesNameIDMap[node->name];
-        //for(map<string,int>::iterator sIter=speciesNameIDMap.begin();sIter!=speciesNameIDMap.end();sIter++)
-        for(int j=0;j<speciesIDNameMap.size();j++)
-        {
-            if(j==specID)
-            {
-                cset.push_back(1); //(*cset)[j]=1;
-            }
-            else
-            {
-                cset.push_back(0); //(*cset)[j]=0;
-            }
-        }
-        //int id=condsetMap_Tree.size();
-        condsetMap_Tree.push_back(cset);//condsetMap_Tree[id]=cset;
-
-        vector<int> cset1;
-        //cset=new map<int,int>;
-        //for(map<string,int>::iterator sIter=speciesNameIDMap.begin();sIter!=speciesNameIDMap.end();sIter++)
-        for(int j=0;j<speciesIDNameMap.size();j++)
-        {
-            if(j==specID)
-            {
-                cset1.push_back(0); //(*cset)[j]=0;
-            }
-            else
-            {
-                cset1.push_back(1); //(*cset)[j]=1;
-            }
-        }
-        //id=condsetMap_Tree.size();
-        condsetMap_Tree.push_back(cset1); //condsetMap_Tree[id]=cset;
-
-        return 0;
-    }
-
-    //Otherwise get me all children under me
-    map<string,int> leaves;
-    getLeaves(node,leaves);
-    cout << "Descendants of " << node->name << " : ";
-    for(map<string,int>::iterator lIter=leaves.begin();lIter!=leaves.end();lIter++)
-    {
-        cout << lIter->first  << " ";
-    }
-    cout << endl;
-
-    // if it is root, first set everything to 1
-    if(node->parent==NULL)
-    {
-        //map<int,int>* cset=new map<int,int>;
-        vector<int> cset;
-        //for(map<string,int>::iterator sIter=speciesNameIDMap.begin();sIter!=speciesNameIDMap.end();sIter++)
-        for(int j=0;j<speciesIDNameMap.size();j++)
-        {
-
-            cset.push_back(1); //(*cset)[j]=1;
-        }
-        //int id=condsetMap_Tree.size();
-        //condsetMap_Tree[id]=cset;
-        condsetMap_Tree.push_back(cset);
-    }
-    if(leaves.size()>1)
-    {
-        //Get me all children under me and set their coordinates to 1
-        //map<int,int>* cset=new map<int,int>;
-        cout<<"leaves.size()>1" << endl;
-        vector<int> cset;
-        //for(map<string,int>::iterator sIter=speciesNameIDMap.begin();sIter!=speciesNameIDMap.end();sIter++)
-        for(int j=0;j<speciesIDNameMap.size();j++)
-        {
-            string specname=speciesIDNameMap[j];
-            if(leaves.find(specname)==leaves.end())
-            {
-                cset.push_back(0); //(*cset)[j]=0;
-            }
-            else
-            {
-                cset.push_back(1); //(*cset)[j]=1;
-            }
-            cout <<specname<<"="<<cset[j]<<endl;
-        }
-        //int id=condsetMap_Tree.size();
-        //condsetMap_Tree[id]=cset;
-        condsetMap_Tree.push_back(cset);
-
-        //Get me all children under me and set their coordinates to 0
-        //cset=new map<int,int>;
-        vector<int> cset1;
-        //for(map<string,int>::iterator sIter=speciesNameIDMap.begin();sIter!=speciesNameIDMap.end();sIter++)
-        for(int j=0;j<speciesIDNameMap.size();j++)
-        {
-            string specname=speciesIDNameMap[j];
-            if(leaves.find(specname)==leaves.end())
-            {
-                cset1.push_back(1); //(*cset)[j]=1;
-            }
-            else
-            {
-                cset1.push_back(0); //(*cset)[j]=0;
-            }
-        }
-        //id=condsetMap_Tree.size();
-        //condsetMap_Tree[id]=cset;
-        condsetMap_Tree.push_back(cset1);
-    }
-
-    leaves.clear();
-    if((!node->children.empty()) && node->parent!=NULL)
-    {
-        cout << "intermediate state: " <<node->name << endl;
-        vector<int> cset;
-        for(int j=0;j<speciesIDNameMap.size();j++)
-        {
-            string specname=speciesIDNameMap[j];
-            if(node->name==specname){
-                cset.push_back(1);
-                cout << specname << "=1\t" ;
-            }else{
-                cset.push_back(0);
-                cout << specname << "=0\t" ;
-            }
-    }
-        cout << endl;
-        condsetMap_Tree.push_back(cset);
-    }
-    if(!node->children.empty())
-    {
-        for(int i=0;i<node->children.size();i++)
-        {
-            initCondsetMap_Tree(node->children[i]);
-        }
-    }
-    return 0;
-}*/
 
 int MetaLearner::initCondsetMap_Tree(SpeciesDistance::Species *node)
 {
@@ -1572,7 +1040,6 @@ int MetaLearner::getLeaves(SpeciesDistance::Species *node, map<string, int> &lea
 // fill in condsetMap
 int MetaLearner::initCondsetMap_Nopool()
 {
-    // int ind=0;
     cout << "MetaLearner::initCondsetMap_Nopool" << endl;
     for (int ind = 0; ind < speciesIDNameMap.size(); ind++)
     {
@@ -1592,15 +1059,7 @@ int MetaLearner::initCondsetMap_Nopool()
             }
             cout << " cell=" << dIter << " status=" << (*cset)[dIter];
         }
-        // cout << " condsetMap[ind]=cset" << endl;
-        // int currind=(int)pow(2.0,ind);
         condsetMap[ind] = cset;
-        // condsetMap0.push_back(cset0);
-        // string condKey;
-        // genCondSetKey(*cset,condKey);
-        // condsetKeyIDMap[condKey]=currind;
-        // condsetIDKeyMap[currind]=condKey;
-        // ind=ind+1;
     }
     return 0;
 }
@@ -2229,18 +1688,6 @@ int MetaLearner::getNewPLLScore(int cid, Variable *u, Variable *v, double &targe
 
     return 0;
 }
-/*
-double
-MetaLearner::getPLLScore_Condition_onefold(string& speciesName,SlimFactor* sFactor)
-{
-    SpeciesDataManager* spd=speciesDataSet[speciesName];
-    PotentialManager* potMgr=spd->getPotentialManager();
-    //EvidenceManager* evMgr=spd->getEvidenceManager();
-    VariableManager* varMgr=spd->getVariableManager();
-    VSET& varSet=varMgr->getVariableSet();
-    double unreg_pll=potMgr->getPseudoLikelihood_onefold(sFactor,varSet);
-    return unreg_pll;
-}*/
 
 double
 MetaLearner::getPLLScore_Condition(int specID, SlimFactor *sFactor)
@@ -2283,65 +1730,6 @@ MetaLearner::getPLLScore_Condition(int specID, SlimFactor *sFactor)
     return unreg_pll;
 }
 
-/*
-// commented by vperiyasamy
-double
-MetaLearner::getPLLScore_Condition(string& speciesName,SlimFactor* sFactor,int& status,INTDBLMAP& regWts)
-{
-    PotentialManager* potMgr=speciesDataSet[speciesName]->getPotentialManager(); // grab managers
-    EvidenceManager* evMgr=speciesDataSet[speciesName]->getEvidenceManager(); // for this
-    VariableManager* varMgr=speciesDataSet[speciesName]->getVariableManager(); // species
-    VSET& varSet=varMgr->getVariableSet();
-
-    string mbkey;
-    char mbchar[256];
-    if(sFactor->mergedMB.size()>0) // sFactor here is for vertex v, if no parents then what?
-    {
-        //	cout <<"Stop here" << endl;
-    }
-    int statuspot=0;
-    Potential* apot=new Potential;
-
-    // get unregularized PLL score?
-    double unreg_pll=potMgr->getPseudoLikelihood(sFactor,varSet,false,statuspot,apot);
-    if(statuspot==-1)
-    {
-        status=-1;
-        delete apot;
-        return 0;
-    }
-
-    // get condition weights from filled in Potential
-    INTDBLMAP& potwts=apot->getCondWeight();
-    for(INTDBLMAP_ITER wIter=potwts.begin();wIter!=potwts.end();wIter++)
-    {
-        regWts[wIter->first]=wIter->second;
-    }
-
-    if((isnan(unreg_pll)) || (isinf(unreg_pll)))
-    {
-        cout <<"Found nan for " << sFactor->fId<< ": MB: ";
-        for(auto mIter=sFactor->mergedMB.begin();mIter!=sFactor->mergedMB.end();mIter++)
-        {
-            cout <<"-"<<*mIter;
-        }
-        cout<< endl;
-    }
-
-    // increase parent count because we have a new edge
-    double varCnt=sFactor->mergedMB.size()+1.0;
-    //double varCnt=sFactor->mergedMB.size();
-
-    double paramCnt=2*varCnt;
-    paramCnt=paramCnt+((varCnt*(varCnt-1))/2);
-    //paramCnt=paramCnt+((varCnt*(varCnt-1))/2);
-    double pll=unreg_pll-(0.5*paramCnt*log(evMgr->getTestSetSize()));//getTestSet().size())); // MERLIN uses training set size? does this make a difference
-    //double pll=unreg_pll;
-    pll=unreg_pll; // ?????? why are we just putting it back to unreg_pll
-    delete apot;
-    return pll;
-}*/
-
 // shilu: more efficient version
 double
 // MetaLearner::getNewPLLScore_Condition_Tracetrick(int csetId, int vId, int uId, Potential* newPot)
@@ -2354,8 +1742,6 @@ MetaLearner::getPLLScore_Condition_Tracetrick(int specID, SlimFactor *sFactor, i
     // VariableManager* varMgr=speciesDataSet[speciesName]->getVariableManager(); // species
     // VSET& varSet=varMgr->getVariableSet();
 
-    // NOTE: use test set in order to get same results as non tracetrick
-    // int datasize = evMgr->getTestSetSize(); //tSet->size();
     double pll = potMgr->computePotentialMBCovMean(sFactor, status);
     /*if(status==-1) {
         return 0;
@@ -2363,76 +1749,6 @@ MetaLearner::getPLLScore_Condition_Tracetrick(int specID, SlimFactor *sFactor, i
     //cout << " data likelihood is " << pll << " getPLLScore_Condition_Tracetrick "<<endl;
     return pll;
 }
-
-/*
-// added by vperiyasamy
-double
-MetaLearner::getPLLScore_Condition_Tracetrick(string& speciesName,SlimFactor* sFactor,int& status,unordered_map<int,double>& regWts)  //sFactor is target
-{
-
-    //cout << "MetaLearner::getPLLScore_Condition_Tracetrick() for " << speciesName ;
-    PotentialManager* potMgr=speciesDataSet[speciesName]->getPotentialManager(); // grab managers
-    EvidenceManager* evMgr=speciesDataSet[speciesName]->getEvidenceManager(); // for this
-    VariableManager* varMgr=speciesDataSet[speciesName]->getVariableManager(); // species
-    VSET& varSet=varMgr->getVariableSet();
-
-    // first define newPot and set it up
-    Potential* newPot = new Potential;
-    newPot->setAssocVariable(varSet[sFactor->fId],Potential::FACTOR); // set v as the target for this potential
-    //vector <int> children;
-    //cout << " Target is " << varSet[sFactor->fId]->getName() << " id=" << sFactor->fId<< " market blank is: ";
-    //children.push_back(sFactor->fId);
-    // second define parentPot and set it up (store regulator of sFactor[target])
-    Potential* parentPot=new Potential;
-    for(auto aIter=sFactor->mergedMB.begin();aIter!=sFactor->mergedMB.end();aIter++) {
-        Variable* aVar=varSet[*aIter];
-        newPot->setAssocVariable(aVar,Potential::MARKOV_BNKT);  //set sFactor->mergedMB as the MARKOV_BNKT
-        //cout << aVar->getName() <<" id=" <<aVar->getID() << " " ;
-        parentPot->setAssocVariable(aVar,Potential::MARKOV_BNKT); //put sFactor->mergedMB into parent
-        //children.push_back(aVar->getID());
-    }
-    //cout << endl;
-
-    newPot->potZeroInit(); // initialize meanWrap[INTDBLMAP], covariance[matrix], mean[1d matrix]
-    //update mean and covariance
-    potMgr->populatePotential_Eff(newPot,false);
-    //This function creates a submatrix of the covariance matrix and inverts it
-    newPot->initMBCovMean(); // compute mbcondVar[CondVariance], mbcondMean_Part[CondBias], mbcondMean_Vect[CondWeight]
-    if(newPot->getCondVariance() < 0) {
-        status=-1;
-        delete newPot;
-        return 0;
-    }
-    // get condition weights from filled in Potential
-    unordered_map<int,double>& potwts = newPot->getCondWeight();
-    for(auto wIter = potwts.begin(); wIter != potwts.end(); wIter++) {
-        regWts[wIter->first] = wIter->second;
-    }
-
-    //double pll=0;
-    //Need to fix this to be set automatically
-    //get parameter prior
-    //double paramPrior=0;
-    // Initialize parentPot:
-    parentPot->potZeroInit();
-    //update mean and covariance
-    potMgr->populatePotential_Eff(parentPot,false);
-
-    // NOTE: use test set in order to get same results as non tracetrick
-    //vector<int>* tSet = &evMgr->getTestSet(); //INTINTMAP* tSet = &evMgr->getTestSet();
-    int datasize = evMgr->getTestSetSize(); //tSet->size();
-    double jointll1 = newPot->computeLL_Tracetrick(datasize);
-    double jointll2 = parentPot->computeLL_Tracetrick(datasize);
-    //double vCnt=(double)newPot->getAssocVariables().size();
-    //double paramCnt=paramCnt+(2*vCnt)+((vCnt*(vCnt-1))/2);
-    double pll = jointll1 - jointll2;
-    //pll=pll-(lambda*paramCnt*log(datasize));
-    //pll = pll - (0.5 * paramCnt * log(datasize));
-    delete newPot;
-    delete parentPot;
-    //cout << " data likelihood is " << pll << " getPLLScore_Condition_Tracetrick runtime: " <<duration.count() << " ms" <<endl;
-    return pll;
-}*/
 
 double
 MetaLearner::getValidationPLLScore_Condition(int cId, int vId)
@@ -2447,11 +1763,7 @@ MetaLearner::getValidationPLLScore_Condition(int cId, int vId)
     }
     double pll = 0;
     // Need to fix this to be set automatically
-    double wt = 0.5;
-    if (!dataPool)
-    {
-        wt = 1;
-    }
+    double wt = 1;
     double paramCnt = 0;
     vector<Variable *> &varSet = varMgr->getVariableSet();
     map<int, Potential *> potSet;
@@ -2486,8 +1798,7 @@ MetaLearner::getValidationPLLScore_Condition(int cId, int vId)
                 string condKey;
                 genCondSetKey(*cset, condKey);
                 PotentialManager *potMgr = pooledPotentials[condKey];
-                // potMgr->populatePotential(sPot,false);
-                potMgr->populatePotential_Eff(sPot, false);
+                potMgr->populatePotential(sPot);
                 sPot->initMBCovMean();
             }
             else
@@ -2524,77 +1835,6 @@ MetaLearner::getValidationPLLScore_Condition(int cId, int vId)
     return pll;
 }
 
-/*
-//This function computes the prior score of the edge between u and v in the species specified by conditionset
-double
-MetaLearner::getEdgePrior(int specID,Variable* u, Variable* v,int orthoGrpNo)
-{
-    double prior=0;
-    if(speciesDataSet.size()==1)
-    {
-        return 0;
-    }
-    STRINTMAP edgeStatus;
-    string& species=speciesIDNameMap[specID];
-    for(map<string,int>::iterator sIter=speciesNameIDMap.begin();sIter!=speciesNameIDMap.end();sIter++)
-    {
-        if(sIter->second==specID)
-        {
-            continue;
-        }
-        int hit=0;
-        STRINTMAP* specTFs=ogr->getOrtholog(species.c_str(),u->getName().c_str(),sIter->first.c_str());
-        STRINTMAP* specTargets=ogr->getOrtholog(species.c_str(),v->getName().c_str(),sIter->first.c_str());
-        if((specTFs==NULL) || (specTargets==NULL))
-        {
-            edgeStatus[sIter->first]=0;
-        }
-        else
-        {
-            SpeciesDataManager* sdm=speciesDataSet[sIter->first];
-            FactorGraph* speciesGraph=sdm->getFactorGraph();
-            VariableManager* vMgr=sdm->getVariableManager();
-            VSET& varSet=vMgr->getVariableSet();
-            //Do any of the genes in this species have data and if is anybody connected to u already
-            for(STRINTMAP_ITER gIter=specTargets->begin();gIter!=specTargets->end();gIter++)
-            {
-                int tgtID=vMgr->getVarID(gIter->first.c_str());
-                if(tgtID==-1)
-                {
-                    continue;
-                }
-                SlimFactor* sFactor=speciesGraph->getFactorAt(tgtID);
-                for(STRINTMAP_ITER fIter=specTFs->begin();fIter!=specTFs->end();fIter++)
-                {
-                    int tfID=vMgr->getVarID(fIter->first.c_str());
-                    if(tfID==-1)
-                    {
-                        continue;
-                    }
-                    if(sFactor->mergedMB.find(tfID)!=sFactor->mergedMB.end())
-                    {
-                        hit++;
-                    }
-                }
-            }
-        }
-        if(hit>0)
-        {
-            edgeStatus[sIter->first]=1;
-        }
-        else
-        {
-            edgeStatus[sIter->first]=0;;
-        }
-    }
-    edgeStatus[species]=1;
-    prior=speciesData->getEdgeStatusProb(edgeStatus);
-    double logPrior=log(prior);
-    edgeStatus.clear();
-    return logPrior;
-}
-*/
-
 // prior probability: between regulator j and target k as a logistic function, remove motifweight
 // tfID is variable ID for regulator, targetID is variable ID for target.
 double
@@ -2628,131 +1868,6 @@ MetaLearner::getEdgePrior_PerSpecies(int tfID, int targetID, SpeciesDataManager 
     return prior;
 }
 
-/*
-// prior probability: between regulator j and target k as a logistic function:
-double
-MetaLearner::getEdgePrior_PerSpecies(int tfID, int targetID,SpeciesDataManager* sdm)
-{
-    INTDBLMAP* regPriors=NULL;
-    double prior=1/(1+exp(-1*beta1));
-    double motifweight=0;
-    double chipweight=0;
-    map<int,map<int,double>*>& motifNetwork=sdm->getMotifNetwork();
-    if(motifNetwork.find(tfID)!=motifNetwork.end())
-    {
-        map<int,double>* values=motifNetwork[tfID];
-        if(values->find(targetID)!=values->end())
-        {
-            motifweight=(*values)[targetID];
-        }
-    }
-    double fwt=motifweight*beta2;
-    prior=1/(1+exp(-1*(beta1+fwt)));
-    if(prior<1e-6)
-    {
-        prior=1e-6;
-    }
-    if(prior==1)
-    {
-        prior=1-1e-6;
-    }
-    return prior;
-}
-
-//This function computes the prior score of the edge between u and v in the species specified by conditionset
-double
-MetaLearner::getEdgePrior(int specID,Variable* u, Variable* v,int orthoGrpNo, int addRemStat)
-{
-    double prior=0;
-    STRINTMAP edgeStatus;
-    string& species=speciesIDNameMap[specID];
-    for(map<string,int>::iterator sIter=speciesNameIDMap.begin();sIter!=speciesNameIDMap.end();sIter++)
-    {
-        int hit=0;
-        STRINTMAP* specTargets=ogr->getOrtholog(species.c_str(),v->getName().c_str(),sIter->first.c_str());
-        STRINTMAP* specTFs=ogr->getOrtholog(species.c_str(),u->getName().c_str(),sIter->first.c_str());
-        if((specTargets==NULL)||(specTFs==NULL))
-        {
-            edgeStatus[sIter->first]=0;
-        }
-        else
-        {
-            SpeciesDataManager* sdm=speciesDataSet[sIter->first];
-            FactorGraph* speciesGraph=sdm->getFactorGraph();
-            VariableManager* vMgr=sdm->getVariableManager();
-            VSET& varSet=vMgr->getVariableSet();
-            //Do any of the genes in this species have data and if is anybody connected to u already
-            for(STRINTMAP_ITER gIter=specTargets->begin();gIter!=specTargets->end();gIter++)
-            {
-                int tgtID=vMgr->getVarID(gIter->first.c_str());
-                if(tgtID==-1)
-                {
-                    continue;
-                }
-                SlimFactor* sFactor=speciesGraph->getFactorAt(tgtID);
-                for(STRINTMAP_ITER fIter=specTFs->begin();fIter!=specTFs->end();fIter++)
-                {
-                    int tfID=vMgr->getVarID(fIter->first.c_str());
-                    if(tfID==-1)
-                    {
-                        continue;
-                    }
-                    if(sFactor->mergedMB.find(tfID)!=sFactor->mergedMB.end())
-                    {
-                        hit++;
-                    }
-                }
-            }
-        }
-        if(hit>0)
-        {
-            edgeStatus[sIter->first]=1;
-        }
-    }
-    //Now we need to figure out what the status of the edge is if v has duplicates and it is present in the dataset. Also if u has
-    //duplicates and is present in the dataset.
-    SpeciesDataManager* sdm=speciesDataSet[species];
-    FactorGraph* speciesGraph=sdm->getFactorGraph();
-    VariableManager* vMgr=sdm->getVariableManager();
-    MappedOrthogroup* ogrp_TF=ogr->getMappedOrthogroup(u->getName().c_str(),species.c_str());
-    MappedOrthogroup* ogrp_Tgt=ogr->getMappedOrthogroup(v->getName().c_str(),species.c_str());
-    map<string,map<string,STRINTMAP*>*>& targets=ogrp_Tgt->getSpeciesHits(species.c_str())->getGeneSet();
-    map<string,map<string,STRINTMAP*>*>& tfs=ogrp_TF->getSpeciesHits(species.c_str())->getGeneSet();
-    int hitinspecies=0;
-    for(map<string,map<string,STRINTMAP*>*>::iterator tgtIter=targets.begin();tgtIter!=targets.end();tgtIter++)
-    {
-        int vId=vMgr->getVarID(tgtIter->first.c_str());
-        if(vId==-1)
-        {
-            continue;
-        }
-        SlimFactor* sFactor=speciesGraph->getFactorAt(vId);
-        for(map<string,map<string,STRINTMAP*>*>::iterator tfIter=tfs.begin();tfIter!=tfs.end();tfIter++)
-        {
-            int uId=vMgr->getVarID(tfIter->first.c_str());
-            if(uId==-1)
-            {
-                continue;
-            }
-            if(sFactor->mergedMB.find(uId)!=sFactor->mergedMB.end())
-            {
-                hitinspecies++;
-            }
-        }
-    }
-    if(hitinspecies>0)
-    {
-        edgeStatus[species]=1;
-    }
-    else
-    {
-        edgeStatus[species]=0;
-    }
-    prior=speciesData->getEdgeStatusProb(edgeStatus);
-    double logPrior=log(prior);
-    return logPrior;
-}*/
-
 int MetaLearner::genCondSetKey(INTINTMAP &condSet, string &aKey)
 {
     char keypair[256];
@@ -2760,24 +1875,6 @@ int MetaLearner::genCondSetKey(INTINTMAP &condSet, string &aKey)
     {
         sprintf(keypair, "-%d=%d", cIter->first, cIter->second);
         aKey.append(keypair);
-    }
-    return 0;
-}
-
-int MetaLearner::sortMoves()
-{
-    for (int m = 0; m < moveSet.size(); m++)
-    {
-        for (int n = m + 1; n < moveSet.size(); n++)
-        {
-            MetaMove *m1 = moveSet[m];
-            MetaMove *m2 = moveSet[n];
-            if (m1->getScoreImprovement() < m2->getScoreImprovement())
-            {
-                moveSet[m] = m2;
-                moveSet[n] = m1;
-            }
-        }
     }
     return 0;
 }
@@ -2830,43 +1927,6 @@ MetaLearner::makeMoves(int &successMove)
     return netScoreDelta;
 }
 
-/*
-int
-MetaLearner::makeDelMoves()
-{
-    map<int,INTINTMAP*> affectedVariables;
-    for(map<string,SpeciesDataManager*>::iterator gIter=speciesDataSet.begin();gIter!=speciesDataSet.end();gIter++)
-    {
-        int cind=speciesNameIDMap[gIter->first];
-        INTINTMAP* csVars=new INTINTMAP;
-        affectedVariables[cind]=csVars;
-    }
-    int successMove=0;
-    double netScoreDelta=0;
-    int net1Move=0;
-    int net2Move=0;
-    for(int m=0;m<moveSet.size();m++)
-    {
-        MetaMove* move=moveSet[m];
-        if(attemptDelMove(move,affectedVariables)==0)
-        {
-            successMove++;
-            netScoreDelta=netScoreDelta+move->getScoreImprovement();
-        }
-    }
-    for(map<int,INTINTMAP*>::iterator cIter=affectedVariables.begin();cIter!=affectedVariables.end();cIter++)
-    {
-        cIter->second->clear();
-        delete cIter->second;
-    }
-    affectedVariables.clear();
-    cout <<"Total successful moves " << successMove << " out of total "
-    << moveSet.size() << " with net score improvement "
-    << netScoreDelta
-    << endl;
-    return 0;
-}*/
-
 // affectedVars not needed, each target is added only once
 int MetaLearner::attemptMove(MetaMove *move)
 {
@@ -2901,136 +1961,6 @@ int MetaLearner::attemptMove(MetaMove *move)
     (*newEdgeStatus)[specID] = 1;
     return 0;
 }
-
-/*
-int
-MetaLearner::attemptMove(MetaMove* move,map<int,INTINTMAP*>& affectedVars)
-{
-    int specID=move->getConditionSetInd();
-    SpeciesDataManager* sdm=speciesDataSet[speciesIDNameMap[specID]];
-    VSET& varSet=sdm->getVariableManager()->getVariableSet();
-    Variable* u=varSet[move->getSrcVertex()];
-    Variable* v=varSet[move->getTargetVertex()];
-    int regi=move->getTFID();
-    int targeti=move->getTargetID();
-    int uogno=ogr->getMappedOrthogroupID(u->getName().c_str(),speciesIDNameMap[specID].c_str()); //TF
-    int vogno=ogr->getMappedOrthogroupID(v->getName().c_str(),speciesIDNameMap[specID].c_str()); //Target
-
-    INTINTMAP* csVars=affectedVars[specID];
-    //INTINTMAP* csVars=affectedVars[1];
-
-    if(csVars->find(uogno)!=csVars->end())
-     {
-     cout <<"TF OG " << uogno  << " already used for "<< speciesIDNameMap[specID] << endl;
-     return -1;
-     }
-    if(vogno==-1)
-    {
-        return 0;
-    }
-    if((vogno!=-1) && (csVars->find(vogno)!=csVars->end()))
-    {
-        cout <<"Target OG " << vogno  << " already used for "<< speciesIDNameMap[specID] << endl;
-        return -1;
-    }
-    (*csVars)[vogno]=0;
-    //(*csVars)[uogno]=0;
-    FactorGraph* csGraph=sdm->getFactorGraph();
-    SlimFactor* dFactor=csGraph->getFactorAt(move->getTargetVertex());
-    dFactor->mergedMB[move->getSrcVertex()]=0;
-    dFactor->mbScore=move->getTargetMBScore();
-    dFactor->setMBWts(move->getSrcWeight());
-    char ogpair[256];
-    sprintf(ogpair,"%d-%d",uogno,vogno);
-    string ogpairKey(ogpair);
-    cout <<"Attempting move " << ogpairKey << " in species " << speciesIDNameMap[specID] << endl;
-    if(edgeConditionMap.find(ogpairKey)==edgeConditionMap.end())
-    {
-        cout <<"No edge pair " << ogpairKey << endl;
-        exit(0);
-    } //shilu: edgeConditionMap contains all possible edges
-    STRINTMAP* newEdgeStatus=NULL;
-    if(affectedOGPairs.find({regi,targeti})==affectedOGPairs.end()) //if(affectedOGPairs.find(ogpairKey)==affectedOGPairs.end())
-    {
-        newEdgeStatus=new STRINTMAP;
-        affectedOGPairs[{regi,targeti}]=newEdgeStatus; //affectedOGPairs[ogpairKey]=newEdgeStatus;
-    }
-    else
-    {
-        newEdgeStatus=affectedOGPairs[{regi,targeti}]; //newEdgeStatus=affectedOGPairs[ogpairKey];
-    }
-    string& species=speciesIDNameMap[specID];
-    //(*newEdgeStatus)[species]=1;
-    (*newEdgeStatus)[species]=(*newEdgeStatus)[species]+1;
-    if((*newEdgeStatus)[species]>1)
-    {
-        cout <<"Adding edge to same family again for "<< species << " gene " << v->getName() << " TF " << u->getName() << endl;
-    }
-    return 0;
-}*/
-
-/*int
-MetaLearner::attemptDelMove(MetaMove* move,map<int,INTINTMAP*>& affectedVars)
-{
-    int specID=move->getConditionSetInd();
-    SpeciesDataManager* sdm=speciesDataSet[speciesIDNameMap[specID]];
-    VSET& varSet=sdm->getVariableManager()->getVariableSet();
-    Variable* u=varSet[move->getSrcVertex()];
-    Variable* v=varSet[move->getTargetVertex()];
-    int uogno=ogr->getMappedOrthogroupID(u->getName().c_str(),speciesIDNameMap[specID].c_str());
-    int vogno=ogr->getMappedOrthogroupID(v->getName().c_str(),speciesIDNameMap[specID].c_str());
-
-    INTINTMAP* csVars=affectedVars[1];
-    if(csVars->find(uogno)!=csVars->end())
-    {
-        return -1;
-    }
-    if((vogno!=-1) && (csVars->find(vogno)!=csVars->end()))
-    {
-        return -1;
-    }
-    FactorGraph* csGraph=sdm->getFactorGraph();
-    SlimFactor* dFactor=csGraph->getFactorAt(move->getTargetVertex());
-    INTINTMAP_ITER vIter=dFactor->mergedMB.find(move->getSrcVertex());
-    if(vIter==dFactor->mergedMB.end())
-    {
-        cout <<"No mb var " << move->getSrcVertex() << " in mb of " << move->getTargetVertex() << endl;
-        return 0;
-    }
-    (*csVars)[uogno]=0;
-    dFactor->mergedMB.erase(vIter->first);
-    dFactor->mbScore=move->getTargetMBScore();
-    dFactor->setMBWts(move->getSrcWeight());
-    if(vogno=-1)
-    {
-        return 0;
-    }
-    (*csVars)[vogno]=0;
-    char ogpair[256];
-    sprintf(ogpair,"%d-%d",uogno,vogno);
-    string ogpairKey(ogpair);
-    if(edgeConditionMap.find(ogpairKey)==edgeConditionMap.end())
-    {
-        cout <<"No edge pair " << ogpairKey << endl;
-        exit(0);
-    }
-    INTINTMAP* currEdgeStatus=edgeConditionMap[ogpairKey];
-    STRINTMAP* newEdgeStatus=new STRINTMAP;
-    affectedOGPairs[ogpairKey]=newEdgeStatus;
-    for(INTINTMAP_ITER cIter=currEdgeStatus->begin();cIter!=currEdgeStatus->end();cIter++)
-    {
-        (*newEdgeStatus)[speciesIDNameMap[cIter->first]]=cIter->second;
-    }
-    string& species=speciesIDNameMap[specID];
-    //(*newEdgeStatus)[species]=0;
-    (*newEdgeStatus)[species]=(*newEdgeStatus)[species]-1;
-    if((*newEdgeStatus)[species]>0)
-    {
-        cout <<"Found a duplicate for "<< species << " gene " << v->getName() << " ogkey " << ogpairKey << endl;
-    }
-
-    return 0;
-}*/
 
 int MetaLearner::dumpAllGraphs(int currK, int foldid)
 {
@@ -3105,8 +2035,7 @@ int MetaLearner::showModelParameters(int foldid)
                 sPot->setAssocVariable(aVar,Potential::MARKOV_BNKT);
             }
             sPot->potZeroInit();
-            //potMgr->populatePotential(sPot,false);
-            potMgr->populatePotential_Eff(sPot,false);
+            potMgr->populatePotential(sPot);
             sPot->initMBCovMean();
             double mbcondvar=sPot->getCondVariance();
             double mbbias=sPot->getCondBias();
@@ -3136,24 +2065,6 @@ int MetaLearner::showModelParameters(int foldid)
     return 0;
 }
 
-/*
-bool
-MetaLearner::checkMBSize(int cid, int u, int currK)
-{
-    bool check=true;
-    SpeciesDataManager* sdm=speciesDataSet[cid];
-    vector<Variable*>& varSet=sdm->getVariableManager()->getVariableSet();
-    Variable* sVar=varSet[u];
-    FactorGraph* fg=sdm->getFactorGraph();
-    SlimFactor* sFactor=fg->getFactorAt(u);
-    //map<string,int>& regulatorSet=sdm->getRegulators();   //not needed?
-    if(sFactor->mergedMB.size()>=currK)
-    {
-        check=false;
-    }
-    return check;
-}*/
-
 int MetaLearner::generateData(int sampleCnt, int burnin, int foldid)
 {
     map<int, ofstream *> newdataFiles;
@@ -3182,8 +2093,7 @@ int MetaLearner::generateData(int sampleCnt, int burnin, int foldid)
                 sPot->setAssocVariable(aVar, Potential::MARKOV_BNKT);
             }
             sPot->potZeroInit();
-            // potMgr->populatePotential(sPot,false);
-            potMgr->populatePotential_Eff(sPot, false);
+            potMgr->populatePotential(sPot);
             sPot->initMBCovMean();
         }
     }
