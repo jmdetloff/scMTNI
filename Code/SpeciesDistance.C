@@ -46,6 +46,7 @@ SpeciesDistance::setProot(double aVal)
 int
 SpeciesDistance::setspeciesNameIDMap(unordered_map<string,int>& spNameIDMap){
     speciesNameIDMap=spNameIDMap;
+    return 0; // Added missing return statement patch (May 11, 2026)
 }
 
 int 
