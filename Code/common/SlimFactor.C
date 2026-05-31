@@ -22,15 +22,4 @@ SlimFactor::SlimFactor()
 SlimFactor::~SlimFactor()
 {
 	mergedMB.clear();
-	mbWts.clear();
-}
-
-int
-SlimFactor::setMBWts(unordered_map<int,double>& wts)
-{
-	for(auto wIter=wts.begin();wIter!=wts.end();wIter++)
-	{
-		mbWts[wIter->first]=wIter->second;
-	}
-	return 0;
 }

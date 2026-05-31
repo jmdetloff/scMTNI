@@ -181,7 +181,7 @@ Framework::init(int argc, char** argv)
 int 
 Framework::start()
 {
-    metaLearner.doOneFold();
+    metaLearner.start();
     return 0;
 }
 

@@ -15,11 +15,8 @@ class SlimFactor
 		SlimFactor();
 		~SlimFactor();
 
-		int setMBWts(unordered_map<int,double>&);
-
 		int fId;
 		double mbScore;
         unordered_set<int> mergedMB;
-		unordered_map<int,double> mbWts;
 };
 #endif
