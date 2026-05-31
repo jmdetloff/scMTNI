@@ -14,7 +14,6 @@
 
 #include <iostream>
 #include <math.h>
-#include "Evidence.H"
 
 #include "Variable.H"
 #include "Potential.H"
@@ -283,59 +282,6 @@ Potential::initMBCovMean()
     delete prod1;
     
     return 0;
-}
-
-double 
-Potential::getCondPotValueFor(INTDBLMAP& assignment)
-{
-	double newmean=0;
-	for(auto aIter=mbcondMean_Vect.begin();aIter!=mbcondMean_Vect.end();aIter++)
-	{
-		double aval=assignment[aIter->first];
-		newmean=newmean+(aval*aIter->second);
-	}
-	newmean=newmean+mbcondMean_Part;
-	double norm=sqrt(2*PI*mbcondVar);
-	double x=assignment[factorVariables.begin()->first];
-	double dev=(x-newmean)*(x-newmean);
-	dev=dev/(2*mbcondVar);
-	double eval=exp(-1.0*dev);
-	double pval=eval/norm;
-	return pval;
-
-}
-
-double 
-Potential::getCondPotValueFor(map<int,Evidence*>* evidMap)
-{
-	if(evidMap->find(factorVariables.begin()->first)==evidMap->end())
-	{
-		cout <<"Fatal error! No variable assignment for " << factorVariables.begin()->first << endl;
-		exit(0);
-	}
-	double newmean=0;
-	for(auto aIter=mbcondMean_Vect.begin();aIter!=mbcondMean_Vect.end();aIter++)
-	{
-		if(evidMap->find(aIter->first)==evidMap->end())
-		{
-			cout <<"Fatal error! No variable assignment for " << aIter->first << endl;
-			exit(0);
-		}
-		Evidence* evid=(*evidMap)[aIter->first];
-		double aval=evid->getEvidVal();
-		newmean=newmean+(aval*aIter->second);
-	}
-	newmean=newmean+mbcondMean_Part;
-	double normsq=2*PI*mbcondVar;
-	double norm=sqrt(2*PI*mbcondVar);
-	norm=sqrt(normsq);
-	Evidence* fevid=(*evidMap)[factorVariables.begin()->first];
-	double x=fevid->getEvidVal();
-	double dev=(x-newmean)*(x-newmean);
-	dev=dev/(2*mbcondVar);
-	double eval=exp(-1.0*dev);
-	double pval=eval/norm;
-	return pval;
 }
 
 double

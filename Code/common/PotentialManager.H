@@ -16,7 +16,6 @@
 using namespace std;
 
 class Potential;
-class EvidenceManager;
 class SlimFactor;
 class Error;
 class VariableManager;
@@ -26,14 +25,12 @@ class PotentialManager
 	public:
 		PotentialManager();
 		~PotentialManager();
-		int setEvidenceManager(EvidenceManager*);
+
         int deleteData();
 		int setOutputDir(const char*);
 		int init();
-		int init(int);
 		int reset();
         int populatePotential(Potential* aPot);
-		double getPseudoLikelihood(SlimFactor*,vector<Variable*>&,bool);
         Error::ErrorCode loadEvidenceFromTable(vector<string>& inputLines);
         Error::ErrorCode loadEvidenceFromTable(vector<string>& inputTable,unordered_set<string>& inputVariableNames);
         VariableManager* getVariableManager();
@@ -44,11 +41,8 @@ class PotentialManager
 
 	private:
 		int estimateCovariance_Eff(int, int);
-		int estimateAllMeanCov(vector<int>&);
-		int readAllMeanCov(const char*, const char*);
 		double computeLL(int dim, double determinant);
 
-		EvidenceManager* evMgr;
 		char outputDir[1024];
 		gsl_matrix* ludecomp;
 		gsl_permutation* perm;

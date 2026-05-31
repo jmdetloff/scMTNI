@@ -11,7 +11,6 @@
 using namespace std;
 
 class VariableManager;
-class EvidenceManager;
 class PotentialManager;
 class MetaMove;
 class SpeciesDistance;
@@ -38,8 +37,6 @@ class MetaLearner
 		int doOneFold();
 		int start(int);
 		int showModelParameters(int);
-		int setPreRandomizeSplit();
-		int setPreRandomizeSplitSeed(int seed);
 		int setINDEP();
 		int setsplitGenes();
 
@@ -48,7 +45,6 @@ class MetaLearner
 		double getInitScore();
 		double getScore();
 		double getPriorDelta();
-		int initEdgeSet();
 		double precomputeEmptyGraphPrior();
 		double precomputePerSpeciesPrior(int specID, int targetID, Variable* target, SpeciesDataManager* sdm, vector<vector<double>> &edgePresenceProb,map<int,MappedOrthogroup*>& orthogroupSet);
 		int initCondsetMap_Nopool();
@@ -60,9 +56,7 @@ class MetaLearner
 
 		int attemptMove(MetaMove*);
 		int getNewPLLScore(int,Variable* u, Variable* v,double&,double&,int);
-		double getPLLScore_Condition(int,SlimFactor* sFactor);
 		double getPLLScore_Condition_Tracetrick(int,SlimFactor* sFactor,int&);
-		double getValidationPLLScore_Condition(int,int);
 		double getEdgePrior_PerSpecies(int tfID, int targetID,SpeciesDataManager*);
 		int genCondSetKey(INTINTMAP& condSet, string& aKey);
 		int dumpAllGraphs(int,int);
@@ -81,7 +75,6 @@ class MetaLearner
 		vector<SpeciesDataManager*> speciesDataSet;
 		unordered_set<int> intermediatecells;
 		map<string,PotentialManager*> pooledPotentials;
-		map<string,EvidenceManager*> pooledData;
 		int maxFactorSize;
 		int maxFactorSizeApprox;
 		string inputFName;
@@ -100,8 +93,6 @@ class MetaLearner
 		map<string,int> subgraphVarSet;
 		map<string,int> bottomClip;
 		map<string,int> topClip;
-		bool preRandomizeSplit;
-		int preRandSeed;
 		double globalVar;
 		MappedOrthogroupReader* ogr;
 		SpeciesDistance* speciesData;

@@ -12,7 +12,6 @@
 
 #define PI M_PI //3.1472 3.1415926
 
-class Evidence;
 class Variable;
 
 class Potential
@@ -49,8 +48,6 @@ class Potential
 		double generateSample(INTDBLMAP&, int vId,gsl_rng*);
 
 		int initMBCovMean();
-		double getCondPotValueFor(INTDBLMAP&);
-		double getCondPotValueFor(map<int,Evidence*>*);
 		double getCondVariance();
 		double getCondBias();
 		unordered_map<int,double>& getCondWeight();
