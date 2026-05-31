@@ -15,6 +15,7 @@ class PotentialManager;
 class MetaMove;
 class SpeciesDistance;
 class MappedOrthogroupReader;
+
 class MetaLearner
 {
 	public:
@@ -34,21 +35,17 @@ class MetaLearner
 		int setSpeciesDistances(SpeciesDistance*);
 		int setBeta1(double);
 		int setBeta2(double);
-		int doOneFold();
-		int start(int);
-		int showModelParameters(int);
+		void start();
 		int setINDEP();
 		int setsplitGenes();
 
-	private:		
+	private:
+		int showModelParameters();
 		void process_mem_usage(double& vm_usage, double& resident_set);
-		double getInitScore();
 		double getScore();
 		double getPriorDelta();
 		double precomputeEmptyGraphPrior();
 		double precomputePerSpeciesPrior(int specID, int targetID, Variable* target, SpeciesDataManager* sdm, vector<vector<double>> &edgePresenceProb,map<int,MappedOrthogroup*>& orthogroupSet);
-		int initCondsetMap_Nopool();
-		INTINTMAP* getConditionSet(int cind);
 		int setinputVariableNames();
 		int collectMoves_Orthogroups(int);
 		int collectMoves_Orthogroups_INDEP(int);
@@ -58,10 +55,9 @@ class MetaLearner
 		int getNewPLLScore(int,Variable* u, Variable* v,double&,double&,int);
 		double getPLLScore_Condition_Tracetrick(int,SlimFactor* sFactor,int&);
 		double getEdgePrior_PerSpecies(int tfID, int targetID,SpeciesDataManager*);
-		int genCondSetKey(INTINTMAP& condSet, string& aKey);
-		int dumpAllGraphs(int,int);
+		int dumpAllGraphs(int);
 
-		int generateData(int sampleCnt, int burnin,int foldid);
+		int generateData(int sampleCnt, int burnin);
 		int generateInitSample(INTDBLMAP& initialSample,gsl_rng* rndgen,map<int,Potential*>*);
 		int writeEvidenceTo(ofstream* oFile,INTDBLMAP& sample);
 		int initCondsetMap_Tree(SpeciesDistance::Species* node);
@@ -85,11 +81,9 @@ class MetaLearner
 		vector<vector<double> > ogpairPrior;
 		FactorGraph* fg;
 		vector<MetaMove*> moveSet;
-		map<int,INTINTMAP*> condsetMap;
 		vector<vector<int>> condsetMap_Tree;
 		map<int,INTDBLMAP*> validationPLLs;
 		char trueGraphFName[1024];
-		map<int,double> finalScores;
 		map<string,int> subgraphVarSet;
 		map<string,int> bottomClip;
 		map<string,int> topClip;

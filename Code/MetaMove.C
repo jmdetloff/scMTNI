@@ -11,16 +11,8 @@
  *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
  *   IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *   */
-#include "MetaMove.H"
-MetaMove::MetaMove()
-{
-}
 
-MetaMove::~MetaMove()
-{
-	//conditionSet.clear();
-	srcWeight.clear();
-}
+#include "MetaMove.H"
 
 int 
 MetaMove::setScoreImprovement(double aVal)
@@ -30,19 +22,11 @@ MetaMove::setScoreImprovement(double aVal)
 }
 
 int
-MetaMove::setSrcMBScore(double aScore)
-{
-	mbscore=aScore;
-	return 0;
-}
-
-int
 MetaMove::setTargetMBScore(double aScore)
 {
 	targetMBScore=aScore;
 	return 0;
 }
-
 
 int 
 MetaMove::setSrcVertex(int vid)
@@ -72,31 +56,10 @@ MetaMove::setTargetID(int vid)
     return 0;
 }
 
-/*int
-MetaMove::setConditionSet(INTINTMAP& vSet)
-{
-	for(INTINTMAP_ITER vIter=vSet.begin();vIter!=vSet.end();vIter++)
-	{
-		conditionSet[vIter->first]=vIter->second;
-	}
-
-	return 0;
-}*/
-
 int
 MetaMove::setConditionSetInd(int aind)
 {
 	conditionSetInd=aind;
-	return 0;
-}
-
-int 
-MetaMove::setSrcWeight(unordered_map<int,double>& awt)
-{
-	for(auto wIter=awt.begin();wIter!=awt.end();wIter++)
-	{
-		srcWeight[wIter->first]=wIter->second;
-	}
 	return 0;
 }
 
@@ -124,22 +87,10 @@ MetaMove::getTargetID()
     return targeti;
 }
 
-/*INTINTMAP&
-MetaMove::getConditionSet()
-{
-	return conditionSet;
-}*/
-
 int
 MetaMove::getConditionSetInd()
 {	
 	return conditionSetInd;
-}
-
-double 
-MetaMove::getSrcMBScore()
-{
-	return mbscore;
 }
 
 double
@@ -148,16 +99,8 @@ MetaMove::getTargetMBScore()
 	return targetMBScore;
 }
 
-
 double 
 MetaMove::getScoreImprovement()
 {
 	return scoreDelta;
 }
-
-unordered_map<int,double>&
-MetaMove::getSrcWeight()
-{
-	return srcWeight;
-}
-

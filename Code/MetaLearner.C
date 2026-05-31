@@ -285,7 +285,7 @@ int MetaLearner::init()
             varNeighborhoodPrior.push_back(priorScore);
             //cout << "cell=" << datasetId << " f=" << f << " sFactor->fId=" << sFactor->fId << " pll=" << pll << " priorScore=" << priorScore << endl;
             sFactor->mbScore = pll + priorScore;
-            initGlobalScore = initGlobalScore + pll + priorScore; // old getInitScore();
+            initGlobalScore = initGlobalScore + pll + priorScore;
             // sFactor->marginalLL=pll;
         }
         varNeighborhoodPrior_PerSpecies.push_back(varNeighborhoodPrior);
@@ -339,102 +339,72 @@ void MetaLearner::readEvidenceTable(string fileName)
     }
 }
 
-int MetaLearner::doOneFold()
+void MetaLearner::start()
 {
-    start(0);
-    char scoreFName[1024];
-    sprintf(scoreFName, "%s/scoreFile.txt", speciesDataSet[0]->getOutputLoc()); // speciesDataSet.begin()->second->getOutputLoc()
-    ofstream sFile(scoreFName);
-    for (map<int, double>::iterator dIter = finalScores.begin(); dIter != finalScores.end(); dIter++)
-    {
-        sFile << dIter->second << endl;
+    if (strlen(trueGraphFName) > 0) {
+        double globalScore = getScore();
+        generateData(10000, 30000);
+        showModelParameters();
+        cout << "Final Score\t" << globalScore << endl;
+        return;
     }
-    sFile.close();
-    return 0;
-}
 
-int MetaLearner::start(int f)
-{
     auto start = high_resolution_clock::now();
     cout << "MetaLearner::start" << endl;
-    // Repeat until convergence
-    double currGlobalScore = initGlobalScore;
-    int maxMBSizeApprox = maxFactorSizeApprox;
-    int currK = maxMBSizeApprox;
-    double initPrior = 0;
-    if (!INDEP)
-    {
-        cout << "precomputeEmptyGraphPrior" << endl;
-        initPrior = precomputeEmptyGraphPrior();
-        initCondsetMap_Tree(speciesData->getRoot());
-    }
     cout << "inputRegulatorOGs.size() = " << inputRegulatorOGs.size() << " inputOGList.size() = " << inputOGList.size() << endl;
 
-    if (strlen(trueGraphFName) == 0)
-    {
-        int iter = 0;
-        bool notConverged = true;
-        while (notConverged && iter < 100) // hardcode 100 iterations for now
-        {
-            // collect the candidate edges
-            if (INDEP) {
-                collectMoves_Orthogroups_INDEP(currK);
-            } else {
-                collectMoves_Orthogroups(currK);
-            }
-            int successMove = 0;
-            double diff = makeMoves(successMove); // diff=sum of move->getScoreImprovement(), which is equal to getScore()-currGlobalScore;
-            double priorChange = 0;
-            if (!INDEP)
-            {
-                priorChange = getPriorDelta();
-            }
-            double newScore = currGlobalScore + diff; // getScore();
-            if (diff <= convThreshold)
-            {
-                notConverged = false;
-            }
-            currGlobalScore = newScore;
-            double vm, rss;
-            process_mem_usage(vm, rss);
-            cout << "ITERATION " << iter << " newScore=" << newScore << " diffscore=" << diff << " priorChange=" << priorChange << " successMove=" << successMove << endl; //" VM: " << vm << " MB; RSS: " << rss << endl;
-            iter++;
+    double currGlobalScore = initGlobalScore;
+
+    if (!INDEP) {
+        precomputeEmptyGraphPrior();
+        initCondsetMap_Tree(speciesData->getRoot());
+    }
+
+    int iter = 0;
+    bool notConverged = true;
+
+    // hardcode 100 iterations for now
+    while (notConverged && iter < 100) {
+
+        // collect the candidate edges
+        if (INDEP) {
+            collectMoves_Orthogroups_INDEP(maxFactorSizeApprox);
+        } else {
+            collectMoves_Orthogroups(maxFactorSizeApprox);
         }
-        dumpAllGraphs(currK, f);
-        cout << "Final Score " << currGlobalScore << endl;
-        finalScores[f] = currGlobalScore;
-        showModelParameters(f);
+
+        int successMove = 0;
+        double diff = makeMoves(successMove);
+        double priorChange = INDEP ? 0 : getPriorDelta();
+        double newScore = currGlobalScore + diff;
+
+        if (diff <= convThreshold) {
+            notConverged = false;
+        }
+
+        currGlobalScore = newScore;
+
+        double vm, rss;
+        process_mem_usage(vm, rss);
+        cout << "ITERATION " << iter << " newScore=" << newScore << " diffscore=" << diff << " priorChange=" << priorChange << " successMove=" << successMove << endl;
+
+        iter++;
     }
-    else
-    {
-        double globalScore = getScore();
-        generateData(10000, 30000, f);
-        showModelParameters(f);
-        cout << "Final Score\t" << globalScore << endl;
-    }
+
+    dumpAllGraphs(maxFactorSizeApprox);
+    cout << "Final Score " << currGlobalScore << endl;
+    showModelParameters();
+
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<microseconds>(stop - start);
     cout << "MetaLearner::start runtime: " << duration.count() << " ms" << endl;
-    return 0;
-}
 
-double
-MetaLearner::getInitScore()
-{
-    cout << "getInitScore" << endl;
-    double initScore = 0;
-    // for(map<string,SpeciesDataManager*>::iterator gIter=speciesDataSet.begin();gIter!=speciesDataSet.end();gIter++)
-    for (int i = 0; i < speciesDataSet.size(); i++)
-    {
-        FactorGraph *fg = speciesDataSet[i]->getFactorGraph(); // gIter->second->getFactorGraph();
-        vector<SlimFactor *> &factorSet = fg->getAllFactors();
-        for (int fIter = 0; fIter < factorSet.size(); fIter++)
-        {
-            SlimFactor *sFactor = factorSet[fIter];
-            initScore = initScore + sFactor->mbScore; // same as sFactor->marginalLL;
-        }
-    }
-    return initScore;
+    char scoreFName[1024];
+    sprintf(scoreFName, "%s/scoreFile.txt", speciesDataSet[0]->getOutputLoc());
+
+    ofstream sFile(scoreFName);
+    sFile << currGlobalScore << endl;
+    sFile.close();
 }
 
 double
@@ -442,7 +412,6 @@ MetaLearner::getScore()
 {
     double gScore = 0;
 
-    // for(map<string,SpeciesDataManager*>::iterator gIter=speciesDataSet.begin();gIter!=speciesDataSet.end();gIter++)
     for (int i = 0; i < speciesDataSet.size(); i++)
     {
         FactorGraph *fg = speciesDataSet[i]->getFactorGraph();
@@ -455,7 +424,7 @@ MetaLearner::getScore()
     }
     return gScore;
 }
-// Shilu: update ogpairPrior, edgeConditionMap not needed
+
 double
 MetaLearner::getPriorDelta()
 {
@@ -494,18 +463,10 @@ MetaLearner::getPriorDelta()
     return priorDelta;
 }
 
-// Update by shilu: compute ogpairPrior, edgeConditionMap not needed
 double
 MetaLearner::precomputeEmptyGraphPrior()
 {
-    // map<string,int> ogpairEdgeCntMap;
-    // map<int,int> ogMaxSpecCnt_TF;
-    // map<int,int> ogMaxSpecCnt_Tgt;
     vector<int> edgeStatus(speciesIDNameMap.size(), 0);
-    /*for(int specIter=0;specIter<speciesIDNameMap.size();specIter++)
-    {
-        edgeStatus[speciesIDNameMap[specIter]]=0;
-    }*/
     double prior = speciesData->getEdgeStatusProb(edgeStatus);
     double logPrior = log(prior);
     int edgeCnt = 0;
@@ -521,19 +482,8 @@ MetaLearner::precomputeEmptyGraphPrior()
                 targetPrior.push_back(0);
                 continue;
             }
-            /*char key[1024];
-            sprintf(key,"%d-%d",ogno_tf,ogno_tgt);
-            string keystr(key);
-            INTINTMAP* edgeSpecAssign=new INTINTMAP;
-            for(map<string,int>::iterator tIter=speciesNameIDMap.begin();tIter!=speciesNameIDMap.end();tIter++)
-            {
-                (*edgeSpecAssign)[tIter->second]=0;
-            }
-            edgeConditionMap[keystr]=edgeSpecAssign;
-            ogpairPrior[keystr]=logPrior;*/
-            targetPrior.push_back(logPrior); // ogpairPrior[regi][targeti]=logPrior;
+            targetPrior.push_back(logPrior);
             edgeCnt++;
-            // cout << "regi=" << regi << " targeti=" << targeti << " ogpairPrior[][]=" << logPrior << endl;
         }
         ogpairPrior.push_back(targetPrior);
     }
@@ -656,6 +606,7 @@ int MetaLearner::initCondsetMap_Tree(SpeciesDistance::Species *node)
     mycondition1.clear();
     return 0;
 }
+
 // shilu: use backtracking to set up constrained conditions:
 vector<unordered_map<int, int>>
 MetaLearner::initCondsetMap_Tree_backtrack(SpeciesDistance::Species *node, vector<unordered_map<int, int>> mycondition, int parentstatus, int ntransition)
@@ -771,44 +722,6 @@ int MetaLearner::getLeaves(SpeciesDistance::Species *node, map<string, int> &lea
         }
     }
     return 0;
-}
-
-// fill in condsetMap
-int MetaLearner::initCondsetMap_Nopool()
-{
-    cout << "MetaLearner::initCondsetMap_Nopool" << endl;
-    for (int ind = 0; ind < speciesIDNameMap.size(); ind++)
-    {
-        INTINTMAP *cset = new INTINTMAP;
-        // cout << "ind=" << ind << " species=" << speciesIDNameMap[ind];
-        // vector<int> cset0(speciesIDNameMap.size(),0);
-        for (int dIter = 0; dIter < speciesIDNameMap.size(); dIter++)
-        {
-            if (ind == dIter)
-            {
-                (*cset)[dIter] = 1;
-                // cset0[dIter]=1;
-            }
-            else
-            {
-                (*cset)[dIter] = 0;
-            }
-            cout << " cell=" << dIter << " status=" << (*cset)[dIter];
-        }
-        condsetMap[ind] = cset;
-    }
-    return 0;
-}
-
-INTINTMAP *
-MetaLearner::getConditionSet(int cind)
-{
-    if (condsetMap.find(cind) == condsetMap.end())
-    {
-        cout << "Did not find any condition sets associated with " << cind << endl;
-        exit(0);
-    }
-    return condsetMap[cind];
 }
 
 int MetaLearner::setinputVariableNames()
@@ -940,9 +853,6 @@ int MetaLearner::collectMoves_Orthogroups(int currK)
                 double scoreImprovement = 0;
                 double newScore = 0;
                 double newTargetScore = 0;
-                // unordered_map<int,double> regwt;
-                // INTINTMAP* cset=getConditionSet(specID);
-                // getNewPLLScore(specID,*cset,reg,target,newScore,scoreImprovement,targetOGIter,regwt); //*cset not needed in CVN
                 getNewPLLScore(specID, reg, target, newScore, scoreImprovement, targetOGIter);
                 //cout << "specID=" << specID << " regi=" << regi << " regOGID=" << regOGIter << " targeti=" << targeti << " targetOGID=" << targetOGIter << " TFname=" << tfgrpMembers[specID] << " targetgene=" << targetgrpMembers[specID] << " regvaribleID=" << regID << " targetvaribleID=" << targetID << " scoreImprovement=" << scoreImprovement << " newScore=" << newScore << endl;
                 if (scoreImprovement > 0) //&& (scoreImprovement>maxScoreImprovement))
@@ -1090,7 +1000,6 @@ int MetaLearner::collectMoves_Orthogroups(int currK)
             move->setTargetID(targeti);                      // inputOGList vector index
             move->setTargetMBScore(bestscore_PerSpecies[i]);
             move->setScoreImprovement(bestscoreImprovement_PerSpecies[i]);
-            // move->setSrcWeight(*bestregWt_PerSpecies); //old *bestregWt_PerSpecies[specID]
             moveSet.push_back(move);
             //cout << "Found edge for " << speciesIDNameMap[i] << " TFvarID=" << besttf_PerSpecies[i] << " TargetvarID=" << besttarget_PerSpecies[i] << " regOGidx=" << bestregi << " targetOGidx=" << targeti << " score improvement=" << bestscoreImprovement_PerSpecies[i] << endl;
             // bestregWt_PerSpecies->clear(); //pointer to old unordered_map<int,double>* regwtforspecies
@@ -1228,9 +1137,6 @@ int MetaLearner::collectMoves_Orthogroups_INDEP(int currK)
                 double scoreImprovement = 0;
                 double newScore = 0;
                 double newTargetScore = 0;
-                // unordered_map<int,double> regwt;
-                // INTINTMAP* cset=getConditionSet(specID);
-                // getNewPLLScore(specID,*cset,reg,target,newScore,scoreImprovement,targetOGIter,regwt); //*cset not needed in CVN
                 getNewPLLScore(specID, reg, target, newScore, scoreImprovement, targetOGIter);
                 // cout << "specID=" << specID <<" regi=" << regi <<  " regOGID=" << regOGIter  <<" targeti=" << targeti << " targetOGID=" <<targetOGIter << " TFname=" << tfgrpMembers[specID] <<" targetgene=" << targetgrpMembers[specID] << " regvaribleID=" << regID << " targetvaribleID=" <<targetID << " scoreImprovement=" << scoreImprovement << " newScore=" << newScore << endl;
                 // Now we wish to see how good it would be add these edges in different groups
@@ -1291,7 +1197,6 @@ int MetaLearner::collectMoves_Orthogroups_INDEP(int currK)
             move->setTargetID(targeti);
             move->setTargetMBScore(bestscore_PerSpecies[specID]);
             move->setScoreImprovement(bestscoreImprovement_PerSpecies[specID]);
-            // move->setSrcWeight(*bestregWt_PerSpecies);
             moveSet.push_back(move);
             // bestregWt_PerSpecies->clear(); //pointer to old unordered_map<int,double>* regwtforspecies
             // delete bestregWt_PerSpecies;
@@ -1324,8 +1229,6 @@ int MetaLearner::collectMoves_Orthogroups_INDEP(int currK)
 // score=likelihood+species-specific prior:
 int MetaLearner::getNewPLLScore(int cid, Variable *u, Variable *v, double &targetmbScore, double &scoreImprovement, int orthoGrpNo)
 {
-    // string condKey;
-    // genCondSetKey(conditionSet,condKey);
     SpeciesDataManager *sdm = speciesDataSet[cid];
     // PotentialManager* potMgr=sdm->getPotentialManager();
     // VSET& varSet=sdm->getVariableManager()->getVariableSet();
@@ -1465,17 +1368,6 @@ MetaLearner::getEdgePrior_PerSpecies(int tfID, int targetID, SpeciesDataManager 
     return prior;
 }
 
-int MetaLearner::genCondSetKey(INTINTMAP &condSet, string &aKey)
-{
-    char keypair[256];
-    for (INTINTMAP_ITER cIter = condSet.begin(); cIter != condSet.end(); cIter++)
-    {
-        sprintf(keypair, "-%d=%d", cIter->first, cIter->second);
-        aKey.append(keypair);
-    }
-    return 0;
-}
-
 double
 MetaLearner::makeMoves(int &successMove)
 {
@@ -1495,14 +1387,6 @@ MetaLearner::makeMoves(int &successMove)
         MetaMove *move = moveSet[m];
         if (attemptMove(move) == 0) // if(attemptMove(move,affectedVariables)==0)
         {
-            /*if(move->getConditionSetInd()==1)
-            {
-                net1Move++;
-            }
-            else if(move->getConditionSetInd()==2)
-            {
-                net2Move++;
-            }*/
             successMove++;
             netScoreDelta = netScoreDelta + move->getScoreImprovement();
         }
@@ -1538,7 +1422,6 @@ int MetaLearner::attemptMove(MetaMove *move)
     SlimFactor *dFactor = csGraph->getFactorAt(move->getTargetVertex());
     dFactor->mergedMB.insert(move->getSrcVertex()); // Aug 23: dFactor->mergedMB[move->getSrcVertex()]=0;
     dFactor->mbScore = move->getTargetMBScore();
-    dFactor->setMBWts(move->getSrcWeight());
 
     vector<int> *newEdgeStatus; // STRINTMAP* newEdgeStatus=NULL;
     char ogpair[20];
@@ -1559,18 +1442,15 @@ int MetaLearner::attemptMove(MetaMove *move)
     return 0;
 }
 
-int MetaLearner::dumpAllGraphs(int currK, int foldid)
+int MetaLearner::dumpAllGraphs(int currK)
 {
     cout << "MetaLearner::dumpAllGraphs" << endl;
-    char foldoutDirName[1024];
     char aFName[1024];
-    // for(map<string,SpeciesDataManager*>::iterator eIter=speciesDataSet.begin();eIter!=speciesDataSet.end();eIter++)
     for (int i = 0; i < speciesDataSet.size(); i++)
     {
-        SpeciesDataManager *sdm = speciesDataSet[i]; // eIter->second;
+        SpeciesDataManager *sdm = speciesDataSet[i];
         const char *dirname = sdm->getOutputLoc();
-        sprintf(foldoutDirName, "%s/fold%d", dirname, foldid);
-        sprintf(aFName, "%s/var_mb_pw_k%d.txt", foldoutDirName, currK);
+        sprintf(aFName, "%s/var_mb_pw_k%d.txt", dirname, currK);
         ofstream oFile(aFName);
         FactorGraph *fg = sdm->getFactorGraph();
         vector<Variable *> &varSet = sdm->getVariableManager()->getVariableSet();
@@ -1582,39 +1462,18 @@ int MetaLearner::dumpAllGraphs(int currK, int foldid)
             potMgr->dumpVarMB_PairwiseFormat(sFactor, oFile, varSet);
         }
         oFile.close();
-        /*sprintf(aFName,"%s/net_ogspace_k%d.txt",foldoutDirName,currK);
-        ofstream eFile(aFName);
-        vector<SlimFactor*>& factorSet=fg->getAllFactors();
-        for(int aIter=0;aIter<factorSet.size();aIter++)
-        {
-            SlimFactor* sFactor=factorSet[aIter];
-            unordered_map<int,double>& mbWts=sFactor->mbWts;
-            for(auto mIter=sFactor->mergedMB.begin();mIter!=sFactor->mergedMB.end();mIter++)
-            {
-                double wtval=mbWts[*mIter];
-                int regulatorogid=ogr->getMappedOrthogroupID(varSet[*mIter]->getName().c_str(),speciesIDNameMap[i].c_str());
-                int targetogid=ogr->getMappedOrthogroupID(varSet[aIter]->getName().c_str(),speciesIDNameMap[i].c_str());
-                //eFile << varSet[mIter->first]->getName()<< "\t"
-                //<< varSet[sFactor->vIds[0]]->getName() << "\t" << wtval
-                eFile << "\t" << regulatorogid << "\t" << targetogid << "\t" << wtval<< endl;
-            }
-        }
-        eFile.close();*/
     }
     return 0;
 }
 
-int MetaLearner::showModelParameters(int foldid)
+int MetaLearner::showModelParameters()
 {
-    char foldoutDirName[1024];
     char aFName[1024];
-    // for(map<string,SpeciesDataManager*>::iterator eIter=speciesDataSet.begin();eIter!=speciesDataSet.end();eIter++)
     for (int i = 0; i < speciesDataSet.size(); i++)
     {
-        SpeciesDataManager *sdm = speciesDataSet[i]; // eIter->second;
+        SpeciesDataManager *sdm = speciesDataSet[i];
         const char *dirname = sdm->getOutputLoc();
-        sprintf(foldoutDirName, "%s/fold%d", dirname, foldid);
-        sprintf(aFName, "%s/modelparams.txt", foldoutDirName);
+        sprintf(aFName, "%s/modelparams.txt", dirname);
         ofstream oFile(aFName);
         FactorGraph *fg = sdm->getFactorGraph();
         PotentialManager *potMgr = sdm->getPotentialManager();
@@ -1623,27 +1482,12 @@ int MetaLearner::showModelParameters(int foldid)
         for (auto sIter = slimFactorSet.begin(); sIter != slimFactorSet.end(); sIter++)
         {
             SlimFactor *sFactor = *sIter;
-            /*Potential* sPot=new Potential;
-            sPot->setAssocVariable(varSet[sFactor->fId],Potential::FACTOR);
-            for(auto mIter=sFactor->mergedMB.begin();mIter!=sFactor->mergedMB.end();mIter++)
-            {
-                Variable* aVar=varSet[*mIter];
-                sPot->setAssocVariable(aVar,Potential::MARKOV_BNKT);
-            }
-            sPot->potZeroInit();
-            potMgr->populatePotential(sPot);
-            sPot->initMBCovMean();
-            double mbcondvar=sPot->getCondVariance();
-            double mbbias=sPot->getCondBias();
-            unordered_map<int,double>& mbwt=sPot->getCondWeight();*/
-            // The weight of the model is really a space filler.
             double mbcondvar = 0;
             double mbbias = 0;
             unordered_map<int, double> mbwt;
             potMgr->computePotentialMBCovMean(sFactor, mbcondvar, mbbias, mbwt);
             Variable *var = varSet[sFactor->fId];
-            oFile << "Var=" << var->getName() << "\tWt=-1"
-                  << "\tCondVar=" << mbcondvar << "\tCondBias=" << mbbias << "\tCondWt=";
+            oFile << "Var=" << var->getName() << "\tWt=-1" << "\tCondVar=" << mbcondvar << "\tCondBias=" << mbbias << "\tCondWt=";
             for (auto dIter = mbwt.begin(); dIter != mbwt.end(); dIter++)
             {
                 if (dIter != mbwt.begin())
@@ -1661,12 +1505,12 @@ int MetaLearner::showModelParameters(int foldid)
     return 0;
 }
 
-int MetaLearner::generateData(int sampleCnt, int burnin, int foldid)
+int MetaLearner::generateData(int sampleCnt, int burnin)
 {
     map<int, ofstream *> newdataFiles;
     gsl_rng *rndgen = gsl_rng_alloc(gsl_rng_default);
     map<int, map<int, Potential *> *> potSet;
-    // for(map<string,SpeciesDataManager*>::iterator gIter=speciesDataSet.begin();gIter!=speciesDataSet.end();gIter++)
+
     for (int i = 0; i < speciesDataSet.size(); i++)
     {
         // int gid=speciesNameIDMap[gIter->first];
@@ -1693,16 +1537,16 @@ int MetaLearner::generateData(int sampleCnt, int burnin, int foldid)
             sPot->initMBCovMean();
         }
     }
-    // for(map<string,SpeciesDataManager*>::iterator sIter=speciesDataSet.begin();sIter!=speciesDataSet.end();sIter++)
+
     for (int i = 0; i < speciesDataSet.size(); i++)
     {
         SpeciesDataManager *sdm = speciesDataSet[i];
         char fileName[1024];
-        sprintf(fileName, "%s/newsamples_f%d.txt", sdm->getOutputLoc(), foldid);
+        sprintf(fileName, "%s/newsamples.txt", sdm->getOutputLoc());
         ofstream *oFile = new ofstream(fileName);
-        newdataFiles[i] = oFile; // speciesNameIDMap[sIter->first]
+        newdataFiles[i] = oFile;
         // Write the model file
-        sprintf(fileName, "%s/newmodel_f%d.txt", sdm->getOutputLoc(), foldid);
+        sprintf(fileName, "%s/newmodel.txt", sdm->getOutputLoc());
         ofstream mFile(fileName);
         mFile << "NodeCnt\t" << subgraphVarSet.size() << endl;
         mFile << "ContinuousNodes";
