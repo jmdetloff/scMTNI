@@ -22,9 +22,6 @@ using namespace std;
 #include "Variable.H"
 #include "VariableManager.H"
 
-#include "Evidence.H"
-#include "EvidenceManager.H"
-
 #include "Potential.H"
 #include "SlimFactor.H"
 
@@ -60,7 +57,7 @@ Framework::init(int argc, char** argv)
     int oldoptind=optind;
     char orthoMapFName[1024];
     char speciesOrder[1024];
-    while(optret=getopt(argc,argv,"f:k:x:p:t:l:i:c:g:r:d:m:s:n:b:q:")!=-1)
+    while(optret=getopt(argc,argv,"f:k:x:p:t:l:i:c:g:d:m:s:n:b:q:")!=-1)
     {
         if(optret=='?')
         {
@@ -132,19 +129,6 @@ Framework::init(int argc, char** argv)
                 if(strcmp(my_optarg,"yes")==0)
                 {
                     metaLearner.setsplitGenes();
-                }
-                break;
-            }
-            case 'r':
-            {
-                if(strcmp(my_optarg,"yes")==0)
-                {
-                    metaLearner.setPreRandomizeSplit();
-                }
-                else if(isdigit(my_optarg[0]))
-                {
-                    metaLearner.setPreRandomizeSplit();
-                    metaLearner.setPreRandomizeSplitSeed(atoi(my_optarg));
                 }
                 break;
             }

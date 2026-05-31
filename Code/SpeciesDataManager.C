@@ -13,14 +13,12 @@
  *   */
 #include <string.h>
 #include "Variable.H"
-#include "Evidence.H"
 #include "Error.H"
 #include "VariableManager.H"
 #include "Potential.H"
 #include "PotentialManager.H"
 #include "SlimFactor.H"
 #include "FactorGraph.H"
-#include "EvidenceManager.H"
 #include "SpeciesDataManager.H"
 
 
@@ -58,14 +56,6 @@ SpeciesDataManager::createFactorGraph()
 	}
 	return 0;
 }
-
-int
-SpeciesDataManager::setEvidenceManager(EvidenceManager* aPtr)
-{
-	evMgr=aPtr;
-	return 0;
-}
-
 
 int 
 SpeciesDataManager::setPotentialManager(PotentialManager* aPtr)
@@ -195,12 +185,6 @@ FactorGraph*
 SpeciesDataManager::getFactorGraph()
 {
 	return fgraph;
-}
-
-EvidenceManager*
-SpeciesDataManager::getEvidenceManager()
-{
-	return evMgr;
 }
 
 PotentialManager*

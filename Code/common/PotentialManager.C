@@ -22,8 +22,6 @@
 #include "Error.H"
 #include "Variable.H"
 #include "Potential.H"
-#include "Evidence.H"
-#include "EvidenceManager.H"
 #include "SlimFactor.H"
 #include "PotentialManager.H"
 #include <chrono>
@@ -77,13 +75,6 @@ PotentialManager::deleteData()
     return 0;
 }
 
-int 
-PotentialManager::setEvidenceManager(EvidenceManager* aPtr)
-{
-	evMgr=aPtr;
-	return 0;
-}
-
 int
 PotentialManager::setOutputDir(const char* aDirName)
 {
@@ -91,18 +82,12 @@ PotentialManager::setOutputDir(const char* aDirName)
 	return 0;
 }
 
-//added from EvidenceManager
 Error::ErrorCode
 PotentialManager::loadEvidenceFromTable(vector<string>& inputTable)
 {
     /* Reads gene names and expression levels from a tab-separated file, where the first row is assumed (for now)
        to be headers. In subsequent rows, the first column is a gene name and remaining columns are expression levels.
-       This method does what VariableManager::readVariables() and EvidenceManager::loadEvidenceFromFile_Continuous()
-       do for .model and .data files.
-    */
-
-    /* For each sample, an EMAP (Evidence Map) is created that has an Evidence object per variable (gene) indexed by
-       variable ID. These EMAPs are saved in evidenceSet, a vector of EMAP*.
+       This method does what VariableManager::readVariables() does for .model and .data files.
     */
     
     // First, let's collect the values per sample. The table has them per gene...
@@ -110,7 +95,6 @@ PotentialManager::loadEvidenceFromTable(vector<string>& inputTable)
     int nodeCount = inputTable.size();
     // How many samples do we have?
     vector<string> substrs = Utils::split(inputTable[0], '\t');
-    //cout <<"Evidence " <<substrs[0] << endl;
     int sampleCount = substrs.size() - 1;  // not counting the gene name
     data=new Matrix(nodeCount,sampleCount);
     int nodeNum = 0;
@@ -140,12 +124,7 @@ PotentialManager::loadEvidenceFromTable(vector<string>& inputTable,unordered_set
 {
     /* Reads gene names and expression levels from a tab-separated file, where the first row is assumed (for now)
        to be headers. In subsequent rows, the first column is a gene name and remaining columns are expression levels.
-       This method does what VariableManager::readVariables() and EvidenceManager::loadEvidenceFromFile_Continuous()
-       do for .model and .data files.
-    */
-
-    /* For each sample, an EMAP (Evidence Map) is created that has an Evidence object per variable (gene) indexed by
-       variable ID. These EMAPs are saved in evidenceSet, a vector of EMAP*.
+       This method does what VariableManager::readVariables() does for .model and .data files.
     */
     
     // First, let's collect the values per sample. The table has them per gene...
@@ -153,7 +132,6 @@ PotentialManager::loadEvidenceFromTable(vector<string>& inputTable,unordered_set
     int nodeCount = inputVariableNames.size();
     // How many samples do we have?
     vector<string> substrs = Utils::split(inputTable[0], '\t');
-    //cout <<"Evidence " <<substrs[0] << endl;
     int sampleCount = substrs.size() - 1;  // not counting the gene name
     data=new Matrix(nodeCount,sampleCount);
     int nodeNum = 0;
@@ -191,31 +169,9 @@ PotentialManager::getVariableManager()
 }
 
 int
-PotentialManager::init(int f)
+PotentialManager::init()
 {
-	char mFName[1024];
-	char sdFName[1024];
-	sprintf(mFName,"%s/gauss_mean_%d.txt",outputDir,f);
-	sprintf(sdFName,"%s/gauss_std_%d.txt",outputDir,f);
-	ifstream inFile(mFName);
-	if(inFile.good())
-	{
-		readAllMeanCov(mFName,sdFName);
-	}
-	else
-	{
-		vector<int>& trainEvidSet=evMgr->getTestSet();
-        estimateAllMeanCov(trainEvidSet);
-	}
-	ludecomp=gsl_matrix_alloc(MAXFACTORSIZE_ALLOC,MAXFACTORSIZE_ALLOC);
-	perm=gsl_permutation_alloc(MAXFACTORSIZE_ALLOC);
-	return 0;
-}
-
-int
-PotentialManager::init()  // one fold only!
-{
-    int varCnt=data->getRowCnt();//number of variables
+    int varCnt=data->getRowCnt();
     meanMat=new Matrix(varCnt,1);
     meanMat->setAllValues(0);
     covMat=new Matrix(varCnt,varCnt);
@@ -246,54 +202,6 @@ PotentialManager::reset()
 }
 
 int
-PotentialManager::estimateAllMeanCov(vector<int>& trainEvidSet)
-{
-    int evidCnt=trainEvidSet.size();
-
-	// First get the mean and then the variance
-    // data is the data matrix which will have the variable by sample information
-    EMAP* evidMap=evMgr->getEvidenceAt(trainEvidSet[0]);
-    int varCnt=evidMap->size();
-    if(data==NULL)
-    {
-        data=new Matrix(varCnt,trainEvidSet.size());
-        meanMat=new Matrix(varCnt,1);
-        meanMat->setAllValues(0);
-        covMat=new Matrix(varCnt,varCnt);
-        covMat->setAllValues(-1);
-    }
-
-    Matrix *data=evMgr->getData();
-    cout << " evidCnt=" << evidCnt << " varCnt=" << varCnt ;
-    for(int eIter=0;eIter<trainEvidSet.size();eIter++)
-    {
-        EMAP* evidMap = evMgr->getEvidenceAt(trainEvidSet[eIter]);
-        for(int vId=0;vId<evidMap->size();vId++)
-        {
-            Evidence* evid=(*evidMap)[vId];
-            double val=evid->getEvidVal();
-            data->setValue(val,vId,trainEvidSet[eIter]);
-        }
-    }
-
-    //Done copying. Now we can go over the rows of data and get the means
-    for(int i=0;i<varCnt;i++)
-    {
-        double s=0;
-        for(int j=0;j<data->getColCnt();j++)
-        {
-            double val=data->getValue(i,j);
-            s=s+val;
-        }
-        double sampleSize=(double) data->getColCnt();
-        meanMat->setValue(s/sampleSize,i,0);
-        cout << "i=" << i << " mean=" <<s/sampleSize << endl;
-    }
-
-    return 0;
-}
-
-int
 PotentialManager::estimateCovariance_Eff(int uId, int vId)
 {
     double vmean=meanMat->getValue(vId,0);
@@ -304,83 +212,6 @@ PotentialManager::estimateCovariance_Eff(int uId, int vId)
     covMat->setValue(var,uId,vId);
     covMat->setValue(var,vId,uId);
     return 0;
-}
-
-int
-PotentialManager::readAllMeanCov(const char* mFName, const char* sdFName)
-{
-
-	ifstream mFile(mFName);
-	ifstream sdFile(sdFName);
-	char buffer[1024];
-	while(mFile.good())
-	{
-		mFile.getline(buffer,1023);
-		if(strlen(buffer)<=0)
-		{
-			continue;
-		}
-		char* tok=strtok(buffer,"\t");
-		int tokCnt=0;
-		int vId;
-		double mean=0;
-		while(tok!=NULL)
-		{	
-			if(tokCnt==0)
-			{
-				vId=atoi(tok);	
-			}
-			else if(tokCnt==1)
-			{
-				mean=atof(tok);
-			}
-			tok=strtok(NULL,"\t");
-			tokCnt++;
-		}
-		//globalMean[vId]=mean;
-        meanMat->setValue(mean,vId,0);
-	}
-	mFile.close();
-	int lineNo=0;
-	while(sdFile.good())
-	{
-		sdFile.getline(buffer,1023);
-		if(strlen(buffer)<=0)
-		{
-			continue;
-		}
-		char* tok=strtok(buffer,"\t");
-		int tokCnt=0;
-		int vId=0;
-		int uId=0;
-		double covariance=0;
-		while(tok!=NULL)
-		{
-			if(tokCnt==0)
-			{
-				uId=atoi(tok);
-			}
-			else if(tokCnt==1)
-			{
-				vId=atoi(tok);
-			}
-			else if(tokCnt==2)
-			{
-				covariance=atof(tok);
-			}
-			tok=strtok(NULL,"\t");
-			tokCnt++;
-		}
-        covMat->setValue(covariance,uId,vId);
-        covMat->setValue(covariance,vId,uId);
-		if(uId==0 && vId==0)
-		{
-			cout << "Found uId=0 vId=0 covar="<< covariance << " at lineno " << lineNo  << endl;
-		}
-		lineNo++;
-	}
-	sdFile.close();
-	return 0;
 }
 
 //precompute covMat and meanMat:
@@ -609,59 +440,4 @@ PotentialManager::computeMeanVarPseudoLikelihood_onefold(int id) //SlimFactor* s
         estimateCovariance_Eff(id,j);
     }
     return pll;
-}
-
-double
-PotentialManager::getPseudoLikelihood(SlimFactor* sFactor,vector<Variable*>& varSet, bool train)
-{
-	Potential* aPotFunc=new Potential;
-	Variable* aVar=varSet[sFactor->fId];
-	aPotFunc->setAssocVariable(aVar,Potential::FACTOR);
-	for(auto aIter=sFactor->mergedMB.begin();aIter!=sFactor->mergedMB.end();aIter++)  //INTINTMAP_ITER
-	{
-		Variable* aVar=varSet[*aIter];
-		aPotFunc->setAssocVariable(aVar,Potential::MARKOV_BNKT);
-	}
-	aPotFunc->potZeroInit();
-    populatePotential(aPotFunc);
-	//This function creates a submatrix of the covariance matrix and inverts it
-	aPotFunc->initMBCovMean();
-	vector<int>* dataSet=NULL;
-	if(train)
-	{
-		dataSet=&(evMgr->getTrainingSet());
-	}
-	else
-	{
-		dataSet=&(evMgr->getTestSet());
-	}
-	INTDBLMAP subData;
-	double pll=0;
-	int thresholded=0;
-    for(int dIter=0;dIter<dataSet->size();dIter++) //for(INTINTMAP_ITER dIter=dataSet->begin();dIter!=dataSet->end();dIter++)
-	{
-		EMAP* evidMap=NULL;
-		evidMap=evMgr->getEvidenceAt((*dataSet)[dIter]); //dIter->first
-		Evidence* evid=(*evidMap)[sFactor->fId];
-		double val=evid->getEvidVal();
-		subData[sFactor->fId]=val;
-		for(auto vIter=sFactor->mergedMB.begin();vIter!=sFactor->mergedMB.end(); vIter++) //INTINTMAP_ITER
-		{
-			int vId=*vIter;
-			Evidence* evid=(*evidMap)[vId];
-			double val=evid->getEvidVal();
-			subData[vId]=val;
-		}
-		double cll=aPotFunc->getCondPotValueFor(subData);
-
-		if(cll<1e-50)
-		{
-			cll=1e-50;
-			thresholded++;
-		}
-		pll=pll+log(cll);
-	}
-	subData.clear();
-	delete aPotFunc;
-	return pll;
 }

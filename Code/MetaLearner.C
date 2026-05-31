@@ -23,9 +23,6 @@
 #include "Variable.H"
 #include "VariableManager.H"
 
-#include "Evidence.H"
-#include "EvidenceManager.H"
-
 #include "Potential.H"
 #include "SlimFactor.H"
 #include "PotentialManager.H"
@@ -50,8 +47,6 @@ MetaLearner::MetaLearner()
 {
     restrictedFName[0] = '\0';
     trueGraphFName[0] = '\0';
-    preRandomizeSplit = false;
-    preRandSeed = -1;
     convThreshold = 1e-4;
     beta1 = -0.9;
     beta2 = 4.0;
@@ -130,18 +125,6 @@ int MetaLearner::setRestrictedList(const char *aFName)
 int MetaLearner::setTrueGraph(const char *aGraphName)
 {
     strcpy(trueGraphFName, aGraphName);
-    return 0;
-}
-
-int MetaLearner::setPreRandomizeSplit()
-{
-    preRandomizeSplit = true;
-    return 0;
-}
-
-int MetaLearner::setPreRandomizeSplitSeed(int seed)
-{
-    preRandSeed = seed;
     return 0;
 }
 
@@ -245,13 +228,6 @@ int MetaLearner::init()
         string motifNetwork = strs[5];
 
         PotentialManager *potMgr = new PotentialManager;
-        /*EvidenceManager* evMgr = new EvidenceManager;
-        if (preRandomizeSplit)
-        {
-            evMgr->setPreRandomizeSplit();
-            evMgr->setPreRandomizeSplitSeed(preRandSeed);
-        }
-        potMgr->setEvidenceManager(evMgr);*/
         string tableFileName = datasetSuff;
         if (datasetSuff.find('.') == std::string::npos)
         {
@@ -274,12 +250,11 @@ int MetaLearner::init()
             cout << Error::getErrorString(eCode) << endl;
             return -1;
         }
-        VariableManager *varMgr = potMgr->getVariableManager(); // evMgr->getVariableManager();
+        VariableManager *varMgr = potMgr->getVariableManager();
         potMgr->setOutputDir(outputLoc.c_str());
         SpeciesDataManager *spMgr = new SpeciesDataManager;
-        speciesDataSet.push_back(spMgr); // speciesDataSet[specName]=spMgr;
+        speciesDataSet.push_back(spMgr);
         spMgr->setVariableManager(varMgr);
-        // spMgr->setEvidenceManager(evMgr);
         spMgr->setPotentialManager(potMgr);
         spMgr->createFactorGraph();
         spMgr->setOutputLoc(outputLoc.c_str());
@@ -334,11 +309,11 @@ int MetaLearner::init()
 
 void MetaLearner::readEvidenceTable(string fileName)
 {
-    /* Reads gene names and expression levels from a tab-separated file, where the first row is assumed (for now)
+    /*
+     Reads gene names and expression levels from a tab-separated file, where the first row is assumed (for now)
      to be headers. In subsequent rows, the first column is a gene name and remaining columns are expression levels.
-     This method just loads the meaningful lines into a vector that is then passed to VariableManager::readVariablesFromTable()
-     and EvidenceManager::loadEvidenceFromTable(). It's done this way so as not to break encapsulation of private members
-     of VariableManager and EvidenceManager.
+     This method just loads the meaningful lines into a vector that is then passed to VariableManager::readVariablesFromTable().
+     It's done this way so as not to break encapsulation of private members of VariableManager.
      */
     cout << "readEvidenceTable:" << fileName << endl;
     ifstream inFile(fileName);
@@ -517,41 +492,6 @@ MetaLearner::getPriorDelta()
     affectedOGPairs.clear();
     double priorDelta = newStructPrior - oldStructPrior;
     return priorDelta;
-}
-
-int MetaLearner::initEdgeSet()
-{
-
-    if (condsetMap.size() == 0)
-    {
-        initCondsetMap_Nopool();
-    }
-    // initCondsetMap_Tree(speciesData->getRoot());
-
-    // for(map<string,SpeciesDataManager*>::iterator eIter=speciesDataSet.begin();eIter!=speciesDataSet.end();eIter++)
-    for (int i = 0; i < speciesDataSet.size(); i++)
-    { // i is specID
-        FactorGraph *condspecGraph = speciesDataSet[i]->getFactorGraph();
-        // string& species=speciesIDNameMap[i];
-        // int specID=speciesNameIDMap[eIter->first];
-        // INTINTMAP* cset=getConditionSet(specID);
-        // string condKey;
-        // genCondSetKey(*cset,condKey);
-        // map<int,double>* varNeighborhoodPrior=varNeighborhoodPrior_PerSpecies[eIter->first];
-        for (int f = 0; f < condspecGraph->getFactorCnt(); f++)
-        {
-            SlimFactor *sFactor = condspecGraph->getFactorAt(f);
-            /*if(sFactor->fId==111)
-            {
-                cout <<"found the target of interest" << endl;
-            }*/
-            double pll = getPLLScore_Condition(i, sFactor);
-            // double priorScore=(*varNeighborhoodPrior)[sFactor->fId];
-            sFactor->mbScore = pll; // pll+priorScore;
-            // sFactor->marginalLL=pll;//pll+priorScore;
-        }
-    }
-    return 0;
 }
 
 // Update by shilu: compute ogpairPrior, edgeConditionMap not needed
@@ -1382,9 +1322,8 @@ int MetaLearner::collectMoves_Orthogroups_INDEP(int currK)
 // u is reg and v is target
 // species-specific prior: sum_reg[log(p)]+sum_nonreg[log(1-p)]
 // score=likelihood+species-specific prior:
-int MetaLearner::getNewPLLScore(int cid, Variable *u, Variable *v, double &targetmbScore, double &scoreImprovement, int orthoGrpNo) // unordered_map<int,double>& regwt
+int MetaLearner::getNewPLLScore(int cid, Variable *u, Variable *v, double &targetmbScore, double &scoreImprovement, int orthoGrpNo)
 {
-    // Each condition set has an evidence manager which pools the data from the specific conditions.
     // string condKey;
     // genCondSetKey(conditionSet,condKey);
     SpeciesDataManager *sdm = speciesDataSet[cid];
@@ -1430,7 +1369,6 @@ int MetaLearner::getNewPLLScore(int cid, Variable *u, Variable *v, double &targe
     }
     double pll_d = getPLLScore_Condition_Tracetrick(cid, dFactor, status);
     //cout << "MetaLearner::getNewPLLScore cell=" << cid << " regID=" << u->getID() << " varID=" << v->getID()  << " currPrior="<< currPrior << " pll_d="<< pll_d << endl;
-    // double pll_d=getPLLScore_Condition(speciesIDNameMap[cid],dFactor,status,regwt);
     if (status == -1)
     {
         scoreImprovement = -1;
@@ -1485,149 +1423,12 @@ int MetaLearner::getNewPLLScore(int cid, Variable *u, Variable *v, double &targe
     return 0;
 }
 
-double
-MetaLearner::getPLLScore_Condition(int specID, SlimFactor *sFactor)
-{
-    SpeciesDataManager *spd = speciesDataSet[specID];
-    PotentialManager *potMgr = spd->getPotentialManager();
-    // EvidenceManager* evMgr=spd->getEvidenceManager();
-    VariableManager *varMgr = spd->getVariableManager();
-    vector<Variable *> &varSet = varMgr->getVariableSet();
-    /*string mbkey;
-    char mbchar[256];
-    for(INTINTMAP_ITER mIter=sFactor->mergedMB.begin();mIter!=sFactor->mergedMB.end();mIter++)
-    {
-        sprintf(mbchar,"-%d",mIter->first);
-        mbkey.append(mbchar);
-    }
-    if(strcmp(mbkey.c_str(),"-1-35-39-45")==0)
-    {
-        cout <<"Found " << mbkey.c_str() << endl;
-    }*/
-    double unreg_pll = potMgr->getPseudoLikelihood(sFactor, varSet, false);
-    if ((isnan(unreg_pll)) || (isinf(unreg_pll)))
-    {
-        cout << "Found nan for " << sFactor->fId << ": MB: ";
-        for (auto mIter = sFactor->mergedMB.begin(); mIter != sFactor->mergedMB.end(); mIter++)
-        {
-            cout << "-" << *mIter;
-        }
-        cout << endl;
-    }
-    /* //comment by shilu
-    //double varCnt=sFactor->mergedMB.size()+1;
-    double varCnt=sFactor->mergedMB.size();
-    double paramCnt=2*varCnt;
-    //double paramCnt=varCnt;
-    paramCnt=paramCnt+((varCnt*(varCnt-1))/2);
-    double pll=unreg_pll-((paramCnt/2)*log(evMgr->getTestSet().size()));
-    //pll=unreg_pll-(0.5*log(evMgr->getTestSet().size()));
-    pll=unreg_pll;*/
-    return unreg_pll;
-}
-
 // shilu: more efficient version
 double
-// MetaLearner::getNewPLLScore_Condition_Tracetrick(int csetId, int vId, int uId, Potential* newPot)
 MetaLearner::getPLLScore_Condition_Tracetrick(int specID, SlimFactor *sFactor, int &status) // sFactor is target, unordered_map<int,double>& regWts
 {
-
-    // cout << "MetaLearner::getPLLScore_Condition_Tracetrick() for " << speciesName ;
     PotentialManager *potMgr = speciesDataSet[specID]->getPotentialManager(); // grab managers
-    EvidenceManager *evMgr = speciesDataSet[specID]->getEvidenceManager();    // for this
-    // VariableManager* varMgr=speciesDataSet[speciesName]->getVariableManager(); // species
-    // VSET& varSet=varMgr->getVariableSet();
-
     double pll = potMgr->computePotentialMBCovMean(sFactor, status);
-    /*if(status==-1) {
-        return 0;
-    }*/
-    //cout << " data likelihood is " << pll << " getPLLScore_Condition_Tracetrick "<<endl;
-    return pll;
-}
-
-double
-MetaLearner::getValidationPLLScore_Condition(int cId, int vId)
-{
-    SpeciesDataManager *sdm = speciesDataSet[cId];
-    EvidenceManager *evMgr = sdm->getEvidenceManager();
-    VariableManager *varMgr = sdm->getVariableManager();
-    INTINTMAP &vSet = evMgr->getValidationSet();
-    if (vSet.size() == 0)
-    {
-        return 0;
-    }
-    double pll = 0;
-    // Need to fix this to be set automatically
-    double wt = 1;
-    double paramCnt = 0;
-    vector<Variable *> &varSet = varMgr->getVariableSet();
-    map<int, Potential *> potSet;
-    int thresholded = 0;
-    for (INTINTMAP_ITER eIter = vSet.begin(); eIter != vSet.end(); eIter++)
-    {
-        EMAP *evidMap = evMgr->getEvidenceAt(eIter->first);
-        // Go over all condition sets that include cInd
-        double cll = 0;
-        for (map<int, INTINTMAP *>::iterator csIter = condsetMap.begin(); csIter != condsetMap.end(); csIter++)
-        {
-            INTINTMAP *cset = csIter->second;
-            if ((*cset)[cId] == 0)
-            {
-                continue;
-            }
-            SpeciesDataManager *localSdm = speciesDataSet[csIter->first];
-            FactorGraph *fg = localSdm->getFactorGraph();
-            SlimFactor *sFactor = fg->getFactorAt(vId);
-            Potential *sPot = NULL;
-            if (potSet.find(csIter->first) == potSet.end())
-            {
-                sPot = new Potential;
-                potSet[csIter->first] = sPot;
-                sPot->setAssocVariable(varSet[sFactor->fId], Potential::FACTOR);
-                for (auto mIter = sFactor->mergedMB.begin(); mIter != sFactor->mergedMB.end(); mIter++)
-                {
-                    Variable *aVar = varSet[*mIter];
-                    sPot->setAssocVariable(aVar, Potential::MARKOV_BNKT);
-                }
-                sPot->potZeroInit();
-                string condKey;
-                genCondSetKey(*cset, condKey);
-                PotentialManager *potMgr = pooledPotentials[condKey];
-                potMgr->populatePotential(sPot);
-                sPot->initMBCovMean();
-            }
-            else
-            {
-                sPot = potSet[csIter->first];
-            }
-            double pval = sPot->getCondPotValueFor(evidMap);
-
-            if (pval < 1e-50)
-            {
-                pval = 1e-50;
-                thresholded++;
-            }
-            if ((pval == 0) || (isnan(pval)) || (isinf(pval)))
-            {
-                //	cout <<"Stop here" << endl;
-            }
-            cll = cll + (pval * wt);
-            if (eIter == vSet.begin())
-            {
-                double vCnt = (double)sPot->getAssocVariables().size();
-                paramCnt = paramCnt + (2 * vCnt) + ((vCnt * (vCnt - 1)) / 2);
-            }
-        }
-        // Check here for really small loglikelihoods
-        pll = pll + log(cll);
-    }
-    pll = pll - (0.5 * paramCnt * log(vSet.size()));
-    for (map<int, Potential *>::iterator pIter = potSet.begin(); pIter != potSet.end(); pIter++)
-    {
-        delete pIter->second;
-    }
-    potSet.clear();
     return pll;
 }
 
