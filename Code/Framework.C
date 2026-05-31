@@ -25,9 +25,6 @@ using namespace std;
 #include "Potential.H"
 #include "SlimFactor.H"
 
-#include "Vertex.H"
-#include "Graph.H"
-
 #include "FactorGraph.H"
 #include "PotentialManager.H"
 #include "MetaMove.H"
