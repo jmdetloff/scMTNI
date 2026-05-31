@@ -211,12 +211,11 @@ void MetaLearner::process_mem_usage(double &vm_usage, double &resident_set)
     resident_set = rss * page_size_kb;
 }
 
-int MetaLearner::init_onefold()
+int MetaLearner::init()
 {
     ifstream inFile(inputFName);
-    cout << "MetaLearner::init_onefold() read:" << inputFName << endl;
+    cout << "MetaLearner::init() read:" << inputFName << endl;
     string buffer;
-    // char buffer[1024];
     int datasetId = 0;
     if (splitGenes)
     {
@@ -333,97 +332,6 @@ int MetaLearner::init_onefold()
     return 0;
 }
 
-int MetaLearner::init()
-{
-    ifstream inFile(inputFName);
-    cout << "MetaLearner::init() read:" << inputFName << endl;
-    string buffer;
-    // char buffer[1024];
-    int datasetId = 0;
-    while (inFile.good())
-    {
-        getline(inFile, buffer);
-        if (buffer.empty() || buffer.find("#") == 0)
-        {
-            continue;
-        }
-        /*
-         inFile.getline(buffer,1023);
-         if(strlen(buffer)<=0)
-         {
-         continue;
-         }
-         if(strstr(buffer,"#")!=NULL)
-         {
-         continue;
-         }
-         */
-        vector<string> strs;
-
-        // strip trailing newlines
-        buffer.erase(buffer.find_last_not_of(" \n\r\t") + 1);
-
-        strs = Utils::split(buffer, '\t');
-        assert(strs.size() == 6);
-        string specName = strs[0];
-        string datasetSuff = strs[1];
-        string outputLoc = strs[2];
-        // string regulatorFName = strs[3];
-        // string targetFName = strs[4];
-        string motifNetwork = strs[5];
-
-        PotentialManager *potMgr = new PotentialManager;
-        EvidenceManager *evMgr = new EvidenceManager;
-        if (preRandomizeSplit)
-        {
-            evMgr->setPreRandomizeSplit();
-            evMgr->setPreRandomizeSplitSeed(preRandSeed);
-        }
-        potMgr->setEvidenceManager(evMgr);
-        string tableFileName = datasetSuff + ".table";
-        readEvidenceTable(tableFileName);
-
-        // merge varMgr->readVariablesFromTable with evMgr->loadEvidenceFromTable(inputTable);
-        /*VariableManager* varMgr = new VariableManager;
-        Error::ErrorCode eCode = varMgr->readVariablesFromTable(inputTable);
-        if(eCode != Error::SUCCESS)
-        {
-            cout << Error::getErrorString(eCode) << endl;
-            return -1;
-        }
-        evMgr->setVariableManager(varMgr);*/
-        Error::ErrorCode eCode = evMgr->loadEvidenceFromTable(inputTable);
-        if (eCode != Error::SUCCESS)
-        {
-            cout << Error::getErrorString(eCode) << endl;
-            return -1;
-        }
-        VariableManager *varMgr = evMgr->getVariableManager();
-        potMgr->setOutputDir(outputLoc.c_str());
-        SpeciesDataManager *spMgr = new SpeciesDataManager;
-        speciesDataSet.push_back(spMgr); // speciesDataSet[specName]=spMgr;
-        spMgr->setVariableManager(varMgr);
-        spMgr->setEvidenceManager(evMgr);
-        spMgr->setPotentialManager(potMgr);
-        spMgr->createFactorGraph();
-        spMgr->setOutputLoc(outputLoc.c_str());
-        // spMgr->readRegulators(regulatorFName.c_str());  //comment by Shilu July 5
-        // spMgr->readTargets(targetFName.c_str());
-        spMgr->setMotifNetwork(motifNetwork.c_str()); // add motif network in CVN for single cell
-        speciesIDNameMap.push_back(specName);         // speciesIDNameMap[datasetId]=specName;
-        speciesNameIDMap[specName] = datasetId;
-        // unordered_map<string,double>* likelihoodPerSpecies=new unordered_map<string,double>;
-        // likelihood[specName]=likelihoodPerSpecies;
-        cout << datasetId << "=" << specName << endl;
-        datasetId += 1; //=datasetId*2;
-        strs.clear();
-    }
-    inFile.close();
-    inputTable.clear();
-    cout << "-------------------------------------------------------------" << endl;
-    return 0;
-}
-
 void MetaLearner::readEvidenceTable(string fileName)
 {
     /* Reads gene names and expression levels from a tab-separated file, where the first row is assumed (for now)
@@ -456,88 +364,8 @@ void MetaLearner::readEvidenceTable(string fileName)
     }
 }
 
-int MetaLearner::doCrossValidation(int foldCnt)
-{
-    totalFoldCnt = foldCnt;
-    /*gsl_rng* r=gsl_rng_alloc(gsl_rng_default);
-    for(map<string,SpeciesDataManager*>::iterator eIter=speciesDataSet.begin();eIter!=speciesDataSet.end();eIter++)
-    {
-        EvidenceManager* evMgr=eIter->second->getEvidenceManager();
-        evMgr->setFoldCnt(foldCnt);
-        evMgr->splitData(0);
-    }
-    gsl_rng_free(r);*/
-    // The first key is for the fold number
-    // For each fold we have a trained model. For each trained model we have the likelihood on
-    // all the test sets, including the self test.
-
-    for (int f = 0; f < foldCnt; f++)
-    {
-        // for(map<string,SpeciesDataManager*>::iterator eIter=speciesDataSet.begin();eIter!=speciesDataSet.end();eIter++)
-        for (int i = 0; i < speciesDataSet.size(); i++)
-        {
-            EvidenceManager *evMgr = speciesDataSet[i]->getEvidenceManager();
-            evMgr->setFoldCnt(foldCnt);
-            evMgr->splitData(f);
-            PotentialManager *potMgr = speciesDataSet[i]->getPotentialManager();
-            potMgr->reset();
-            potMgr->init(f);
-            char outputDir[1024];
-            sprintf(outputDir, "%s/fold%d", speciesDataSet[i]->getOutputLoc(), f);
-            char foldOutputDirCmd[1024];
-            sprintf(foldOutputDirCmd, "mkdir -p %s", outputDir);
-            system(foldOutputDirCmd);
-        }
-        initEdgeSet(); // need to double check for cross-validation with more folds (moved from start(f));
-        initGlobalScore = getInitScore();
-        start(f);
-        // Now get all the PLL scores on the validation sets
-        // for(map<string,SpeciesDataManager*>::iterator eIter=speciesDataSet.begin();eIter!=speciesDataSet.end();eIter++)
-        for (int i = 0; i < speciesDataSet.size(); i++)
-        {
-            double pll = 0;
-            VariableManager *varMgr = speciesDataSet[i]->getVariableManager();
-            vector<Variable *> &varSet = varMgr->getVariableSet();
-            int specID = i; // speciesNameIDMap[eIter->first];
-            EvidenceManager *evMgr = speciesDataSet[i]->getEvidenceManager();
-            INTINTMAP &vSet = evMgr->getValidationSet();
-            if (vSet.size() == 0)
-            {
-                cout << "No validation data!" << endl;
-                break;
-            }
-            for (int j = 0; j < varSet.size(); j++)
-            {
-                pll = pll + getValidationPLLScore_Condition(specID, j);
-            }
-            INTDBLMAP *pllSet = NULL;
-            if (validationPLLs.find(specID) == validationPLLs.end())
-            {
-                pllSet = new INTDBLMAP;
-                validationPLLs[specID] = pllSet;
-            }
-            else
-            {
-                pllSet = validationPLLs[specID];
-            }
-            (*pllSet)[f] = pll;
-        }
-    }
-
-    char scoreFName[1024];
-    sprintf(scoreFName, "%s/scoreFile.txt", speciesDataSet[0]->getOutputLoc()); // speciesDataSet.begin()->second->getOutputLoc()
-    ofstream sFile(scoreFName);
-    for (map<int, double>::iterator dIter = finalScores.begin(); dIter != finalScores.end(); dIter++)
-    {
-        sFile << dIter->second << endl;
-    }
-    sFile.close();
-    return 0;
-}
-
 int MetaLearner::doOneFold()
 {
-    totalFoldCnt = 1;
     start(0);
     char scoreFName[1024];
     sprintf(scoreFName, "%s/scoreFile.txt", speciesDataSet[0]->getOutputLoc()); // speciesDataSet.begin()->second->getOutputLoc()
@@ -555,9 +383,8 @@ int MetaLearner::start(int f)
     auto start = high_resolution_clock::now();
     cout << "MetaLearner::start" << endl;
     // Repeat until convergence
-    double currGlobalScore = initGlobalScore;  // currGlobalScore=-1; currGlobalScore=getInitScore();
-    int maxMBSizeApprox = maxFactorSizeApprox; // maxFactorSizeApprox-1; by shilu
-    // int currK=1;
+    double currGlobalScore = initGlobalScore;
+    int maxMBSizeApprox = maxFactorSizeApprox;
     int currK = maxMBSizeApprox;
     double initPrior = 0;
     if (!INDEP)
@@ -565,68 +392,39 @@ int MetaLearner::start(int f)
         cout << "precomputeEmptyGraphPrior" << endl;
         initPrior = precomputeEmptyGraphPrior();
         initCondsetMap_Tree(speciesData->getRoot());
-        /*cout << "condsetMap_Tree" << endl;
-        for (int setIter = 0; setIter < condsetMap_Tree.size(); setIter++)
-        {
-            // INTINTMAP* cset=setIter->second;
-            vector<int> &cset = condsetMap_Tree[setIter];
-            cout << setIter;
-            for (auto cIter = 0; cIter < cset.size(); cIter++)
-            {
-                cout << " " << speciesIDNameMap[cIter] << "=" << cset[cIter];
-            }
-            cout << endl;
-        }*/
     }
     cout << "inputRegulatorOGs.size() = " << inputRegulatorOGs.size() << " inputOGList.size() = " << inputOGList.size() << endl;
 
     if (strlen(trueGraphFName) == 0)
     {
-        // while(currK<=maxMBSizeApprox)
-        //{
-        int iter = 0; // vperiyasamy added
+        int iter = 0;
         bool notConverged = true;
         while (notConverged && iter < 100) // hardcode 100 iterations for now
         {
-            // cout << "ITERATION " << iter << endl;
             // collect the candidate edges
-            if (!INDEP)
-            {
-                collectMoves_Orthogroups(currK);
-            }
-            else
-            {
+            if (INDEP) {
                 collectMoves_Orthogroups_INDEP(currK);
+            } else {
+                collectMoves_Orthogroups(currK);
             }
             int successMove = 0;
             double diff = makeMoves(successMove); // diff=sum of move->getScoreImprovement(), which is equal to getScore()-currGlobalScore;
-            /*if(currGlobalScore==-1)
-            {
-                currGlobalScore=getInitScore();
-                //	currGlobalScore=currGlobalScore+initPrior;
-            }*/
             double priorChange = 0;
             if (!INDEP)
             {
                 priorChange = getPriorDelta();
             }
-            // priorChange=getPriorDelta();
             double newScore = currGlobalScore + diff; // getScore();
-            // newScore=newScore+initPrior+priorChange;
-            // double diff=newScore-currGlobalScore;
             if (diff <= convThreshold)
             {
                 notConverged = false;
             }
-            // dumpAllGraphs(currK,f);
             currGlobalScore = newScore;
             double vm, rss;
             process_mem_usage(vm, rss);
             cout << "ITERATION " << iter << " newScore=" << newScore << " diffscore=" << diff << " priorChange=" << priorChange << " successMove=" << successMove << endl; //" VM: " << vm << " MB; RSS: " << rss << endl;
             iter++;
         }
-        // currK++;
-        // }
         dumpAllGraphs(currK, f);
         cout << "Final Score " << currGlobalScore << endl;
         finalScores[f] = currGlobalScore;
@@ -634,12 +432,10 @@ int MetaLearner::start(int f)
     }
     else
     {
-        // populateGraphsFromFile();
         double globalScore = getScore();
         generateData(10000, 30000, f);
         showModelParameters(f);
-        // cout <<"Final Score " << globalScore<< endl;
-        cout << "Final Score\tTOTALFOLD" << totalFoldCnt << "_fold" << f << "\t" << globalScore << endl;
+        cout << "Final Score\t" << globalScore << endl;
     }
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<microseconds>(stop - start);
