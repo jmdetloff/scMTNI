@@ -21,6 +21,5 @@ class Framework
 		SpeciesDistance spData;
 		double epsThreshold;
 		char actionStr[256];
-		int cvCnt;
 };
 #endif

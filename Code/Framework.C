@@ -46,22 +46,11 @@ using namespace std;
 Framework::Framework()
 {
     epsThreshold=-1;
-    cvCnt=1;
 }
-
 
 Framework::~Framework()
 {
 }
-
-//We will use getopt here
-//The options are 
-//-m modelname
-//-e epsilon to control the number of standard deviations above random
-//-k maxfactorsize
-//-s number of samples for approximate information estimation
-//-x k for which we approximate information
-//-n cnt of the top candidate MBs to save
 
 Error::ErrorCode
 Framework::init(int argc, char** argv)
@@ -71,7 +60,7 @@ Framework::init(int argc, char** argv)
     int oldoptind=optind;
     char orthoMapFName[1024];
     char speciesOrder[1024];
-    while(optret=getopt(argc,argv,"f:k:x:p:t:v:l:i:c:g:r:d:m:s:n:b:q:")!=-1)
+    while(optret=getopt(argc,argv,"f:k:x:p:t:l:i:c:g:r:d:m:s:n:b:q:")!=-1)
     {
         if(optret=='?')
         {
@@ -118,13 +107,6 @@ Framework::init(int argc, char** argv)
             {
                 double convThreshold=atof(my_optarg);
                 metaLearner.setConvergenceThreshold(convThreshold);
-                break;
-            }
-            //curently only one fold:
-            case 'v':
-            {
-                cvCnt=atoi(my_optarg);
-                cvCnt=1;
                 break;
             }
             case 'l':
@@ -206,18 +188,11 @@ Framework::init(int argc, char** argv)
         }
         oldoptind=optind;
     }
-    
-    //reorder by shilu
-    mor.readSpeciesMapping(speciesOrder); //speciesIDNameMap
-    mor.readFile(orthoMapFName);  //generateGeneOrthoMap();
+
+    mor.readSpeciesMapping(speciesOrder);
+    mor.readFile(orthoMapFName);
     metaLearner.setOrthogroupReader(&mor);
-    //curently only one fold:
-    if(cvCnt==1){
-        metaLearner.init_onefold();
-    }else{
-        metaLearner.init();
-    }
-    
+    metaLearner.init();
     metaLearner.setSpeciesDistances(&spData);
     return Error::SUCCESS;
 }
@@ -225,15 +200,9 @@ Framework::init(int argc, char** argv)
 int 
 Framework::start()
 {
-    //metaLearner.start();
-    if(cvCnt==1){
-        metaLearner.doOneFold();
-    }else{
-        metaLearner.doCrossValidation(cvCnt);
-    }
+    metaLearner.doOneFold();
     return 0;
 }
-
 
 int
 main(int argc, char* argv[])

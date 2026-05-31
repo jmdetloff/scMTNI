@@ -21,6 +21,8 @@ class MetaLearner
 	public:
 		MetaLearner();
 		~MetaLearner();
+
+		int init();
 		int setInputFName(const char*);
 		int setMaxFactorSize(int);
 		int setMaxFactorSize_Approx(int);
@@ -33,15 +35,11 @@ class MetaLearner
 		int setSpeciesDistances(SpeciesDistance*);
 		int setBeta1(double);
 		int setBeta2(double);
-		int init();
-		int doCrossValidation(int);
 		int doOneFold();
 		int start(int);
 		int showModelParameters(int);
 		int setPreRandomizeSplit();
 		int setPreRandomizeSplitSeed(int seed);
-		//added by Shilu
-		int init_onefold();
 		int setINDEP();
 		int setsplitGenes();
 
@@ -102,7 +100,6 @@ class MetaLearner
 		map<string,int> subgraphVarSet;
 		map<string,int> bottomClip;
 		map<string,int> topClip;
-		int totalFoldCnt;
 		bool preRandomizeSplit;
 		int preRandSeed;
 		double globalVar;
