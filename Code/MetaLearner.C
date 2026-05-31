@@ -1581,7 +1581,6 @@ int MetaLearner::dumpAllGraphs(int currK, int foldid)
             SlimFactor *sFactor = factorSet[aIter];
             potMgr->dumpVarMB_PairwiseFormat(sFactor, oFile, varSet);
         }
-        // fg->dumpVarMB_PairwiseFormat(oFile,varSet);
         oFile.close();
         /*sprintf(aFName,"%s/net_ogspace_k%d.txt",foldoutDirName,currK);
         ofstream eFile(aFName);

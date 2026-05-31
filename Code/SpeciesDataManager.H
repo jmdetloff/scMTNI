@@ -12,8 +12,6 @@ class PotentialManager;
 class SpeciesDataManager
 {
 	public:
-		SpeciesDataManager();
-		~SpeciesDataManager();
 		int setVariableManager(VariableManager*);
 		int createFactorGraph();
 		int setPotentialManager(PotentialManager*);
