@@ -29,8 +29,6 @@ using namespace std;
 #include "PotentialManager.H"
 #include "MetaMove.H"
 
-#include "MappedOrthogroup.H"
-#include "MappedOrthogroupReader.H"
 #include "SpeciesDistance.H"
 #include "SpeciesDataManager.H"
 #include "MetaLearner.H"
@@ -51,9 +49,7 @@ Framework::init(int argc, char** argv)
     int optret='-';
     opterr=1;
     int oldoptind=optind;
-    char orthoMapFName[1024];
-    char speciesOrder[1024];
-    while(optret=getopt(argc,argv,"f:k:x:p:t:l:i:c:g:d:m:s:n:b:q:")!=-1)
+    while(optret=getopt(argc,argv,"f:k:x:p:t:l:i:d:n:b:q:")!=-1)
     {
         if(optret=='?')
         {
@@ -104,12 +100,7 @@ Framework::init(int argc, char** argv)
             }
             case 'l':
             {
-                metaLearner.setRestrictedList(my_optarg);
-                break;
-            }
-            case 'g':
-            {
-                metaLearner.setTrueGraph(my_optarg);
+                metaLearner.setRegulatorList(my_optarg);
                 break;
             }
             case 'i':
@@ -120,32 +111,14 @@ Framework::init(int argc, char** argv)
                 }
                 break;
             }
-            case 'c':
-            {
-                if(strcmp(my_optarg,"yes")==0)
-                {
-                    metaLearner.setsplitGenes();
-                }
-                break;
-            }
             case 'd':
             {
                 spData.readSpeciesTree(my_optarg);
                 break;
             }
-            case 'm':
-            {
-                strcpy(orthoMapFName,my_optarg);
-                break;
-            }
-            case 's':
-            {
-                strcpy(speciesOrder,my_optarg);
-                break;
-            }
             case 'n':
             {
-                metaLearner.setInputOGList(my_optarg);
+                metaLearner.setTargetList(my_optarg);
                 break;
             }
             case 'b':
@@ -169,9 +142,6 @@ Framework::init(int argc, char** argv)
         oldoptind=optind;
     }
 
-    mor.readSpeciesMapping(speciesOrder);
-    mor.readFile(orthoMapFName);
-    metaLearner.setOrthogroupReader(&mor);
     metaLearner.init();
     metaLearner.setSpeciesDistances(&spData);
     return Error::SUCCESS;

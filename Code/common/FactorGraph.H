@@ -13,12 +13,12 @@ class FactorGraph
 		FactorGraph();
 		~FactorGraph();
 
-		int setFactor(SlimFactor*);
 		int getFactorCnt();
-		SlimFactor* getFactorAt(int);
-		vector<SlimFactor*>& getAllFactors();
+
+		void addFactor(int varID);
+		SlimFactor* getFactor(int varID);
 
 	private:
-		vector<SlimFactor*> factorSet;
+		unordered_map<int, SlimFactor*> factors;
 };
 #endif

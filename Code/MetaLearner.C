@@ -34,8 +34,6 @@
 
 #include "SpeciesDistance.H"
 #include "SpeciesDataManager.H"
-#include "MappedOrthogroup.H"
-#include "MappedOrthogroupReader.H"
 #include "MetaLearner.H"
 #include <chrono>
 #include <unistd.h>
@@ -44,26 +42,22 @@ using namespace std;
 
 MetaLearner::MetaLearner()
 {
-    restrictedFName[0] = '\0';
-    trueGraphFName[0] = '\0';
     convThreshold = 1e-4;
     beta1 = -0.9;
     beta2 = 4.0;
     INDEP = false;
     initGlobalScore = 0;
-    splitGenes = false;
 }
 
 MetaLearner::~MetaLearner()
 {
-    inputVariables.clear();
-    inputOGList.clear();
-    inputRegulatorOGs.clear();
+    variableList.clear();
+    targetList.clear();
+    regulatorList.clear();
 }
 
 int MetaLearner::setInputFName(const char *aFName)
 {
-    // strcpy(inputFName,aFName);
     inputFName = aFName;
     return 0;
 }
@@ -86,73 +80,56 @@ int MetaLearner::setINDEP()
     return 0;
 }
 
-int MetaLearner::setsplitGenes()
-{
-    splitGenes = true;
-    return 0;
-}
-
 int MetaLearner::setConvergenceThreshold(double aVal)
 {
     convThreshold = aVal;
     return 0;
 }
 
-int MetaLearner::setRestrictedList(const char *aFName)
-{
-    strcpy(restrictedFName, aFName);
-    ifstream inFile(restrictedFName);
-    string buffer;
-    while (inFile.good())
-    {
-        getline(inFile, buffer);
-        if (buffer.length() <= 0)
-        {
-            continue;
-        }
-        int ogid = atoi(buffer.c_str());
-        inputRegulatorOGs.push_back(ogid); // inputRegulatorOGs[ogid]=0;
-        inputVariables.insert(ogid);
-    }
-    inFile.close();
-    /*for(int i=0;i<inputRegulatorOGs.size();i++){
-        cout <<"inputRegulatorOGs[" << i << "]=" << inputRegulatorOGs[i] << endl;
-    }*/
-    return 0;
-}
-
-int MetaLearner::setTrueGraph(const char *aGraphName)
-{
-    strcpy(trueGraphFName, aGraphName);
-    return 0;
-}
-
-int MetaLearner::setInputOGList(const char *aFName)
+int MetaLearner::setRegulatorList(const char *aFName)
 {
     ifstream inFile(aFName);
-    char buffer[1024];
-    while (inFile.good())
-    {
-        inFile.getline(buffer, 1023);
-        if (strlen(buffer) <= 0)
-        {
+    string buffer;
+    while (inFile.good()) {
+        getline(inFile, buffer);
+        if (buffer.length() <= 0) {
             continue;
         }
-        int og = atoi(buffer);
-        inputOGList.push_back(og); // inputOGList[og]=0;
-        inputVariables.insert(og);
+        int varIndex = addVariable(buffer);
+        regulatorList.push_back(varIndex);
     }
     inFile.close();
-    /*for(int i=0;i<inputOGList.size();i++){
-        cout <<"inputOGList[" << i << "]=" << inputOGList[i] << endl;
-    }*/
     return 0;
 }
 
-int MetaLearner::setOrthogroupReader(MappedOrthogroupReader *aPtr)
+int MetaLearner::setTargetList(const char *aFName)
 {
-    ogr = aPtr;
+    ifstream inFile(aFName);
+    string buffer;
+    while (inFile.good()) {
+        getline(inFile, buffer);
+        if (buffer.length() <= 0) {
+            continue;
+        }
+        int varIndex = addVariable(buffer);
+        targetList.push_back(varIndex);
+    }
+    inFile.close();
     return 0;
+}
+
+int MetaLearner::addVariable(string varName)
+{
+    vector<string>::iterator iter = find(variableList.begin(), variableList.end(), varName);
+
+    // If the variable already exists, just return its index.
+    if (iter != variableList.end()) {
+        return distance(variableList.begin(), iter);
+    }
+
+    // Otherwise append it.
+    variableList.push_back(varName);
+    return variableList.size() - 1;
 }
 
 int MetaLearner::setSpeciesDistances(SpeciesDistance *aPtr)
@@ -195,113 +172,85 @@ void MetaLearner::process_mem_usage(double &vm_usage, double &resident_set)
 
 int MetaLearner::init()
 {
-    ifstream inFile(inputFName);
     cout << "MetaLearner::init() read:" << inputFName << endl;
+
+    ifstream inFile(inputFName);
     string buffer;
-    int datasetId = 0;
-    if (splitGenes)
-    {
-        setinputVariableNames();
-    }
-    // set sparsity prior: edgePresenceProb
-    map<int, MappedOrthogroup *> &orthogroupSet = ogr->getMappedOrthogroups();
-    while (inFile.good())
-    {
+
+    while (inFile.good()) {
         getline(inFile, buffer);
-        if (buffer.empty() || buffer.find("#") == 0)
-        {
+
+        if (buffer.empty() || buffer.find("#") == 0) {
             continue;
         }
-        vector<string> strs;
 
         // strip trailing newlines
         buffer.erase(buffer.find_last_not_of(" \n\r\t") + 1);
 
-        strs = Utils::split(buffer, '\t');
-        assert(strs.size() >= 3);
-        string specName = strs[0];
-        string datasetSuff = strs[1];
-        string outputLoc = strs[2];
-        // string regulatorFName = strs[3];
-        // string targetFName = strs[4];
-        string motifNetwork = strs[5];
-
-        PotentialManager *potMgr = new PotentialManager;
-        string tableFileName = datasetSuff;
-        if (datasetSuff.find('.') == std::string::npos)
-        {
-            tableFileName = datasetSuff + ".table";
-            std::cout << "no .table in input expression filename, add .table suffix:" << tableFileName << endl;
-            
-        }
-        readEvidenceTable(tableFileName);
-        Error::ErrorCode eCode;
-        if (splitGenes)
-        {
-            eCode = potMgr->loadEvidenceFromTable(inputTable, inputVariableNames[datasetId]);
-        }
-        else
-        {
-            eCode = potMgr->loadEvidenceFromTable(inputTable);
-        }
-        if (eCode != Error::SUCCESS)
-        {
-            cout << Error::getErrorString(eCode) << endl;
-            return -1;
-        }
-        VariableManager *varMgr = potMgr->getVariableManager();
-        potMgr->setOutputDir(outputLoc.c_str());
-        SpeciesDataManager *spMgr = new SpeciesDataManager;
-        speciesDataSet.push_back(spMgr);
-        spMgr->setVariableManager(varMgr);
-        spMgr->setPotentialManager(potMgr);
-        spMgr->createFactorGraph();
-        spMgr->setOutputLoc(outputLoc.c_str());
-        spMgr->setMotifNetwork(motifNetwork.c_str()); // add motif prior network in CVN for single cell
-        speciesIDNameMap.push_back(specName);         // speciesIDNameMap[datasetId]=specName;
-        speciesNameIDMap[specName] = datasetId;
-        cout << datasetId << "=" << specName << " motifNetwork=" << motifNetwork << endl;
-
-        // move one fold cross-validation here:
-        potMgr->reset();
-        potMgr->init();
-        char foldOutputDirCmd[1024];
-        sprintf(foldOutputDirCmd, "mkdir -p %s/fold0", outputLoc.c_str());
-        system(foldOutputDirCmd);
-        FactorGraph *condspecGraph = spMgr->getFactorGraph();
-        // initialize factor graph with pll score:
-        // sparsity prior for each target:
-        vector<double> varNeighborhoodPrior;
-        vector<Variable *> &varSet = varMgr->getVariableSet();
-        vector<vector<double>> edgePresenceProb(condspecGraph->getFactorCnt(), vector<double>(condspecGraph->getFactorCnt(), 0));
-        for (int f = 0; f < condspecGraph->getFactorCnt(); f++)
-        {
-            SlimFactor *sFactor = condspecGraph->getFactorAt(f);
-            double pll = potMgr->computeMeanVarPseudoLikelihood_onefold(sFactor->fId);
-            Variable *target = varSet[sFactor->fId];
-            double priorScore = precomputePerSpeciesPrior(datasetId, sFactor->fId, target, spMgr, edgePresenceProb, orthogroupSet);
-            varNeighborhoodPrior.push_back(priorScore);
-            //cout << "cell=" << datasetId << " f=" << f << " sFactor->fId=" << sFactor->fId << " pll=" << pll << " priorScore=" << priorScore << endl;
-            sFactor->mbScore = pll + priorScore;
-            initGlobalScore = initGlobalScore + pll + priorScore;
-        }
-        varNeighborhoodPrior_PerSpecies.push_back(varNeighborhoodPrior);
-        edgePresenceProb_PerSpecies.push_back(edgePresenceProb);
-        potMgr->deleteData();
-        //cout << "cell=" << datasetId << " variable size=" << condspecGraph->getFactorCnt() << endl;
-        datasetId += 1; //=datasetId*2;
-        strs.clear();
-        varNeighborhoodPrior.clear();
-        for (int i = 0; i < edgePresenceProb.size(); i++)
-        {
-            edgePresenceProb[i].clear();
-        }
-        edgePresenceProb.clear();
+        vector<string> strs = Utils::split(buffer, '\t');
+        initSpeciesData(strs[0], strs[1], strs[2], strs[3]);
     }
     inFile.close();
     inputTable.clear();
     cout << "-------------------------------------------------------------" << endl;
     return 0;
+}
+
+void MetaLearner::initSpeciesData(string speciesName, string tableFileName, string outputLoc, string motifNetwork)
+{
+    if (tableFileName.find('.') == std::string::npos) {
+        tableFileName = tableFileName + ".table";
+        std::cout << "no .table in input expression filename, add .table suffix:" << tableFileName << endl;
+    }
+
+    readEvidenceTable(tableFileName);
+
+    PotentialManager *potMgr = new PotentialManager;
+    potMgr->setOutputDir(outputLoc.c_str());
+    potMgr->loadEvidenceFromTable(inputTable, variableList);
+
+    VariableManager *varMgr = potMgr->getVariableManager();
+
+    SpeciesDataManager *spMgr = new SpeciesDataManager;
+    spMgr->setVariableManager(varMgr);
+    spMgr->setPotentialManager(potMgr);
+    spMgr->createFactorGraph();
+    spMgr->setOutputLoc(outputLoc.c_str());
+    spMgr->setMotifNetwork(motifNetwork.c_str());
+    speciesDataSet.push_back(spMgr);
+
+    int datasetID = speciesDataSet.size() - 1;
+    speciesIDNameMap.push_back(speciesName);
+    speciesNameIDMap[speciesName] = datasetID;
+
+    cout << datasetID << "=" << speciesName << " motifNetwork=" << motifNetwork << endl;
+
+    potMgr->reset();
+    potMgr->init();
+
+    char foldOutputDirCmd[1024];
+    sprintf(foldOutputDirCmd, "mkdir -p %s/fold0", outputLoc.c_str());
+    system(foldOutputDirCmd);
+
+    FactorGraph *condspecGraph = spMgr->getFactorGraph();
+    unordered_map<int, double> varNeighborhoodPrior;
+    unordered_map<int, unordered_map<int, double>> edgePresenceProb;
+
+    vector<Variable*>& variableSet = varMgr->getVariableSet();
+    for (int i = 0; i < variableSet.size(); i++) {
+        Variable *target = variableSet[i];
+        SlimFactor *sFactor = condspecGraph->getFactor(target->getID());
+        double pll = potMgr->computeMeanVarPseudoLikelihood(sFactor->fId);
+        double priorScore = precomputePerSpeciesPrior(datasetID, target, spMgr, edgePresenceProb);
+        varNeighborhoodPrior[sFactor->fId] = priorScore;
+        sFactor->mbScore = pll + priorScore;
+        initGlobalScore = initGlobalScore + pll + priorScore;
+    }
+
+    varNeighborhoodPrior_PerSpecies.push_back(varNeighborhoodPrior);
+    edgePresenceProb_PerSpecies.push_back(edgePresenceProb);
+
+    potMgr->deleteData();
 }
 
 void MetaLearner::readEvidenceTable(string fileName)
@@ -338,17 +287,9 @@ void MetaLearner::readEvidenceTable(string fileName)
 
 void MetaLearner::start()
 {
-    if (strlen(trueGraphFName) > 0) {
-        double globalScore = getScore();
-        generateData(10000, 30000);
-        showModelParameters();
-        cout << "Final Score\t" << globalScore << endl;
-        return;
-    }
-
     auto start = high_resolution_clock::now();
     cout << "MetaLearner::start" << endl;
-    cout << "inputRegulatorOGs.size() = " << inputRegulatorOGs.size() << " inputOGList.size() = " << inputOGList.size() << endl;
+    cout << "Regulator Count: " << regulatorList.size() << " Target Count: " << targetList.size() << endl;
 
     double currGlobalScore = initGlobalScore;
 
@@ -365,9 +306,9 @@ void MetaLearner::start()
 
         // collect the candidate edges
         if (INDEP) {
-            collectMoves_Orthogroups_INDEP(maxFactorSizeApprox);
+            collectMoves_INDEP(maxFactorSizeApprox);
         } else {
-            collectMoves_Orthogroups(maxFactorSizeApprox);
+            collectMoves(maxFactorSizeApprox);
         }
 
         int successMove = 0;
@@ -404,115 +345,88 @@ void MetaLearner::start()
     sFile.close();
 }
 
-double
-MetaLearner::getScore()
+double MetaLearner::getScore()
 {
     double gScore = 0;
 
-    for (int i = 0; i < speciesDataSet.size(); i++)
-    {
+    for (int i = 0; i < speciesDataSet.size(); i++) {
         FactorGraph *fg = speciesDataSet[i]->getFactorGraph();
-        vector<SlimFactor *> &factorSet = fg->getAllFactors();
-        for (int fIter = 0; fIter < factorSet.size(); fIter++)
-        {
-            SlimFactor *sFactor = factorSet[fIter];
+        VariableManager *varMgr = speciesDataSet[i]->getVariableManager();
+        vector<Variable*>& variableSet = varMgr->getVariableSet();
+        for (int j = 0; j < variableSet.size(); j++) {
+            Variable *var = variableSet[j];
+            SlimFactor *sFactor = fg->getFactor(var->getID());
             gScore = gScore + sFactor->mbScore;
         }
     }
     return gScore;
 }
 
-double
-MetaLearner::getPriorDelta()
+double MetaLearner::getPriorDelta()
 {
     double oldStructPrior = 0;
     double newStructPrior = 0;
     // Need to consider the old contribution of the edges, delete that from the overall prior and add the new contribution
-    for (auto edgeIter = affectedOGPairs.begin(); edgeIter != affectedOGPairs.end(); edgeIter++)
+    for (auto edgeIter = affectedVarPairs.begin(); edgeIter != affectedVarPairs.end(); edgeIter++)
     {
         vector<string> keyid = Utils::split(edgeIter->first, '-');
-        int regi = stoi(keyid[0]);
-        int targeti = stoi(keyid[1]);
+        int regulatorID = stoi(keyid[0]);
+        int targetID = stoi(keyid[1]);
         double aval = speciesData->getEdgeStatusProb(*(edgeIter->second));
         double edgePrior = log(aval);
-        double oldEdgePrior = ogpairPrior[regi][targeti];
+        double oldEdgePrior = edgePriors[targetID][regulatorID];
         oldStructPrior += oldEdgePrior;
         newStructPrior += edgePrior;
-        ogpairPrior[regi][targeti] = edgePrior;
-        // cout <<" ogpairPrior[" << regi<<"][" << targeti << "]=" <<ogpairPrior[regi][targeti] << endl;
-        keyid.clear();
+        edgePriors[targetID][regulatorID] = edgePrior;
     }
-    for (auto edgeIter = affectedOGPairs.begin(); edgeIter != affectedOGPairs.end(); edgeIter++)
+    for (auto edgeIter = affectedVarPairs.begin(); edgeIter != affectedVarPairs.end(); edgeIter++)
     {
-        edgeIter->second->clear();
         delete edgeIter->second;
     }
-    affectedOGPairs.clear();
+    affectedVarPairs.clear();
     double priorDelta = newStructPrior - oldStructPrior;
     return priorDelta;
 }
 
-double
-MetaLearner::precomputeEmptyGraphPrior()
+void MetaLearner::precomputeEmptyGraphPrior()
 {
     vector<int> edgeStatus(speciesIDNameMap.size(), 0);
     double prior = speciesData->getEdgeStatusProb(edgeStatus);
     double logPrior = log(prior);
-    int edgeCnt = 0;
-    for (int regi = 0; regi < inputRegulatorOGs.size(); regi++)
-    {
-        int ogno_tf = inputRegulatorOGs[regi];
-        vector<double> targetPrior;
-        for (int targeti = 0; targeti < inputOGList.size(); targeti++)
-        {
-            int ogno_tgt = inputOGList[targeti];
-            if (ogno_tf == ogno_tgt)
-            {
-                targetPrior.push_back(0);
-                continue;
-            }
-            targetPrior.push_back(logPrior);
-            edgeCnt++;
+    for (int i = 0; i < targetList.size(); i++) {
+        int targetID = targetList[i];
+        unordered_map<int, double> targetPriors;
+        for (int j = 0; j < regulatorList.size(); j++) {
+            int regulatorID = regulatorList[j];
+            if (regulatorID == targetID) {
+                targetPriors[regulatorID] = 0;
+            } else {
+                targetPriors[regulatorID] = logPrior;
+            }    
         }
-        ogpairPrior.push_back(targetPrior);
+        edgePriors[targetID] = targetPriors;
     }
-    double emptyGraphPrior = edgeCnt * logPrior;
-    return emptyGraphPrior;
 }
 
-// Shilu: compute varNeighborhoodPrior_PerSpecies[specID][targeti]: set to 0
-// edgePresenceProb is the same for CVN for each edge per cell, so no need to store into a map
-// targetID is variable ID
-double
-MetaLearner::precomputePerSpeciesPrior(int specID, int targetID, Variable *target, SpeciesDataManager *sdm, vector<vector<double>> &edgePresenceProb, map<int, MappedOrthogroup *> &orthogroupSet)
+double MetaLearner::precomputePerSpeciesPrior(int specID, Variable *target, SpeciesDataManager *sdm, unordered_map<int, unordered_map<int, double>> &edgePresenceProb)
 {
-    // double initPrior=edgePresenceProb;
-    string spec = speciesIDNameMap[specID];
-    int ogno_tgt = ogr->getMappedOrthogroupID(target->getName().c_str(), spec.c_str());
-    double NeighborhoodPrior = 0;
-    for (int regi = 0; regi < inputRegulatorOGs.size(); regi++)
-    {
-        int ogno_tf = inputRegulatorOGs[regi];
-        if (ogno_tf == ogno_tgt)
-        {
+    VariableManager *vMgr = sdm->getVariableManager();
+    int targetID = target->getID();
+    double neighborhoodPrior = 0;
+    for (int i = 0; i < regulatorList.size(); i++) {
+        int regID = regulatorList[i];
+        Variable *regulatorVar = vMgr->getVariable(regID);
+
+        // Confirm that the regulator exists in this species' dataset, and that it isnt the target.
+        if (regulatorVar == nullptr || regID == targetID) {
             continue;
         }
-        MappedOrthogroup *tfogrp = orthogroupSet[ogno_tf]; // oIter->second; four species
-        vector<string> &tfgrpMembers = tfogrp->getOrthoMembers();
-        VariableManager *vMgr = sdm->getVariableManager();
-        int regID = vMgr->getVarID(tfgrpMembers[specID].c_str());
-        if (regID == -1)
-        {
-            // cout << tfgrpMembers[specID]<< " not in " << spec << endl;
-            continue;
-        }
-        double initPrior = getEdgePrior_PerSpecies(regID, targetID, sdm);
+
+        double initPrior = getEdgePrior(regID, targetID, sdm);
         edgePresenceProb[regID][targetID] = initPrior;
-        NeighborhoodPrior += log(1 - initPrior);
-        //cout << spec << " regi=" << regi << " TF_OGID=" << ogno_tf << " target_OGID=" << ogno_tgt << " regVarID=" << regID << " targetVarID=" << targetID << " " << tfgrpMembers[specID] << "->" << target->getName() << ": initPrior=" << initPrior << endl;
+        neighborhoodPrior += log(1 - initPrior);
     }
-    //cout << spec << "target=" << target->getName() << " NeighborhoodPrior=" << NeighborhoodPrior << endl;
-    return NeighborhoodPrior;
+    return neighborhoodPrior;
 }
 
 int MetaLearner::initCondsetMap_Tree(SpeciesDistance::Species *node)
@@ -713,411 +627,294 @@ int MetaLearner::getLeaves(SpeciesDistance::Species *node, map<string, int> &lea
     return 0;
 }
 
-int MetaLearner::setinputVariableNames()
+int MetaLearner::collectMoves(int currK)
 {
-    //cout << "MetaLearner::setinputVariableNames()" << endl;
-    map<int, MappedOrthogroup *> &orthogroupSet = ogr->getMappedOrthogroups();
-    for (auto og = inputVariables.begin(); og != inputVariables.end(); og++)
-    {
-        MappedOrthogroup *targetogrp = orthogroupSet[*og];
-        vector<string> &targetgrpMembers = targetogrp->getOrthoMembers();
-        for (int specID = 0; specID < targetgrpMembers.size(); specID++)
-        {
-            if (strcmp(targetgrpMembers[specID].c_str(), "None") != 0)
-            {
-                inputVariableNames[specID].insert(targetgrpMembers[specID]);
-                //cout << "og=" << *og << " specID=" << specID << " varName(inputVariableNames[specID])=" << targetgrpMembers[specID] << endl;
-            }
-        }
-    }
-    cout << "MetaLearner::setinputVariableNames number of variables: " << inputVariables.size() << endl;
-    return 0;
-}
-
-int MetaLearner::collectMoves_Orthogroups(int currK)
-{
-    // auto start = high_resolution_clock::now();
     for (int i = 0; i < moveSet.size(); i++)
     {
         delete moveSet[i];
     }
     moveSet.clear();
-    map<int, MappedOrthogroup *> &orthogroupSet = ogr->getMappedOrthogroups();
 
-    // Now we will have a move for one orthogroup at a time
-    for (int targeti = 0; targeti < inputOGList.size(); targeti++)
-    {
-        int targetOGIter = inputOGList[targeti];
-        MappedOrthogroup *targetogrp = orthogroupSet[targetOGIter]; // oIter->second; four species
-        vector<string> &targetgrpMembers = targetogrp->getOrthoMembers();
-        int n = speciesIDNameMap.size();
+    int numSpecies = speciesIDNameMap.size();
+
+    for (int i = 0; i < targetList.size(); i++) {
+        int targetID = targetList[i];
+
+        unordered_map<int, double> oldPriors = edgePriors[targetID];
 
         // score the score of best regulator:
-        vector<double> bestscore_PerSpecies(n, 0);
-        vector<double> bestscoreImprovement_PerSpecies(n, 0);
-        vector<int> besttarget_PerSpecies(n, -1);
-        vector<int> besttf_PerSpecies(n, -1);
+        vector<double> bestscore_PerSpecies(numSpecies, 0);
+        vector<double> bestscoreImprovement_PerSpecies(numSpecies, 0);
+        vector<int> besttarget_PerSpecies(numSpecies, -1);
+        vector<int> besttf_PerSpecies(numSpecies, -1);
         int bestcsetid = -1;
-        int bestregi = -1; // inputRegulatorOGs vector index
+        int bestRegulatorID = -1;
         double bestScoreImprovement_TF = 0;
+
         // The logic of this is we will basically search for the utility of each regulator across every species. The datalikelihood
         // term is computed separately from the prior. Then we will consider what will happen if were to make moves for all species.
 
-        // for each regulator
-        for (int regi = 0; regi < inputRegulatorOGs.size(); regi++)
-        {
-            int regOGIter = inputRegulatorOGs[regi];
-            if (regOGIter == targetOGIter)
-            {
+        for (int j = 0; j < regulatorList.size(); j++) {
+            int regulatorID = regulatorList[j];
+
+            if (targetID == regulatorID) {
                 continue;
             }
-            MappedOrthogroup *tfogrp = orthogroupSet[regOGIter];
-            vector<string> &tfgrpMembers = tfogrp->getOrthoMembers();
-            double oldpriorScore = ogpairPrior[regi][targeti];
 
-            // only store current tf for each species!
-            vector<double> score_PerSpecies(n, 0);
-            vector<double> scoreImprovement_PerSpecies(n, 0);
-            vector<int> target_PerSpecies(n, 0); // store variable index
-            vector<int> tf_PerSpecies(n, 0);
+            double oldPrior = oldPriors[regulatorID];
+
+            vector<double> score_PerSpecies(numSpecies, 0);
+            vector<double> scoreImprovement_PerSpecies(numSpecies, 0);
             int nscoreImp = 0;
 
             // for each species:
             for (int specID = 0; specID < speciesIDNameMap.size(); specID++)
             {
-                string spec = speciesIDNameMap[specID]; // specIter->second;
+                string spec = speciesIDNameMap[specID];
                 SpeciesDataManager *sdm = speciesDataSet[specID];
                 FactorGraph *speciesGraph = sdm->getFactorGraph();
                 VariableManager *vMgr = sdm->getVariableManager();
-                vector<Variable *> &varSet = vMgr->getVariableSet();
-                int targetID = vMgr->getVarID(targetgrpMembers[specID].c_str());
-                int regID = vMgr->getVarID(tfgrpMembers[specID].c_str());
-                //cout << "regi=" << regi << " regOGID=" << regOGIter << " targeti=" << targeti << " targetOGID=" << targetOGIter << " TFname=" << tfgrpMembers[specID] << " targetgene=" << targetgrpMembers[specID] << " regvaribleID=" << regID << " targetvaribleID=" << targetID << endl;
-                if (targetID == -1 || regID == -1)
-                {
-                    //cout << "regulators or gene not present in " << spec << " TFname=" << tfgrpMembers[specID] << " targetgene=" << targetgrpMembers[specID] << " regvaribleID=" << regID << " targetvaribleID=" << targetID << endl;
-                    continue;
-                }
-                // If the species has multiple genes in it's list, we consider the member which will give the max improvement, that is
-                // highest data likelihood. Similarly, we will extract the highest likelihood if there are multiple regulators
-                double maxScore = -999999;
-                double maxScoreImprovement = -999999;
-                // Best here makes sense only if there are multiple TFs and targets
-                int bestTarget = -1;
-                int bestTF = -1;
-                Variable *target = varSet[targetID];
-                SlimFactor *sFactor = speciesGraph->getFactorAt(targetID);
-                // If the edge already exists in the MB of sFactor continue
-                if (sFactor->mergedMB.find(regID) != sFactor->mergedMB.end())
-                {
-                    // cout <<"Edge exists in the MB of sFactor" << endl;
-                    continue;
-                }
-                if (sFactor->mergedMB.size() >= currK)
-                {
-                    continue;
-                }
-                Variable *reg = varSet[regID];
+                Variable *target = vMgr->getVariable(targetID);
+                Variable *regulator = vMgr->getVariable(regulatorID);
 
-                // Otherwise get the score delta of adding this reguluator in sFactor's MB.
+                // Ensure that the target and regulator are both present in this species' dataset.
+                if (target == nullptr || regulator == nullptr) {
+                    continue;
+                }
+
+                SlimFactor *sFactor = speciesGraph->getFactor(targetID);
+
+                // If the edge already exists in the MB of sFactor continue
+                if (sFactor->mergedMB.find(regulatorID) != sFactor->mergedMB.end()) {
+                    continue;
+                }
+
+                // If the target already has the max num edges, continue.
+                if (sFactor->mergedMB.size() >= currK) {
+                    continue;
+                }
+
+                // Otherwise get the score delta of adding this regulator in sFactor's MB.
                 double scoreImprovement = 0;
                 double newScore = 0;
-                double newTargetScore = 0;
-                getNewPLLScore(specID, reg, target, newScore, scoreImprovement, targetOGIter);
-                //cout << "specID=" << specID << " regi=" << regi << " regOGID=" << regOGIter << " targeti=" << targeti << " targetOGID=" << targetOGIter << " TFname=" << tfgrpMembers[specID] << " targetgene=" << targetgrpMembers[specID] << " regvaribleID=" << regID << " targetvaribleID=" << targetID << " scoreImprovement=" << scoreImprovement << " newScore=" << newScore << endl;
-                if (scoreImprovement > 0) //&& (scoreImprovement>maxScoreImprovement))
-                {
-                    bestTarget = targetID; // variable index
-                    bestTF = regID;        // variable index
-                    maxScoreImprovement = scoreImprovement;
-                    maxScore = newScore;
-                }
-                else
-                {
+                getNewPLLScore(specID, regulator, target, newScore, scoreImprovement);
+
+                // If adding the edge wouldn't improve score, we dont need to consider it.
+                if (scoreImprovement <= 0) {
                     continue;
                 }
-                // At this stage we are done with this species, and if maxDLL >0 we proceed with updating the information for this species
-                scoreImprovement_PerSpecies[specID] = maxScoreImprovement;
-                score_PerSpecies[specID] = maxScore;
-                target_PerSpecies[specID] = bestTarget;
-                tf_PerSpecies[specID] = bestTF;
+
+                scoreImprovement_PerSpecies[specID] = scoreImprovement;
+                score_PerSpecies[specID] = newScore;
                 nscoreImp++;
-            } // CVNvariant: species dataset end
-            if (nscoreImp == 0)
-            {
-                continue;
-                // cout <<"Skipping no hit regulator " <<  regOGIter << endl;
             }
+
+            if (nscoreImp == 0) {
+                continue;
+            }
+
             // Now we wish to see how good it would be add these edges in different conditions for all cell types:
-            double bestImprovement = 0; // adding edge or not, which improvement is higher
+            double bestImprovement = 0;
             int csetid = -1;
-            // cout <<"Compute for each condsetMap_Tree" << endl;
+
             for (int setIter = 0; setIter < condsetMap_Tree.size(); setIter++)
             {
                 vector<int> &cset = condsetMap_Tree[setIter];
                 vector<int> speciesEdgeStat(cset.size(), 0);
                 int valid = 1;
+
                 // compute score improvement+prior for each condition:
                 double netImprovement = 0;
-                for (int i = 0; i < cset.size(); i++)
-                {
-                    if (cset[i] == 1)
-                    {
+                for (int i = 0; i < cset.size(); i++) {
+                    if (cset[i] == 1) {
                         speciesEdgeStat[i] = 1;
-                        if (scoreImprovement_PerSpecies[i] > 0)
-                        {
-                            netImprovement += scoreImprovement_PerSpecies[i];
-                        }
-                        else
-                        {
+                        if (scoreImprovement_PerSpecies[i] <= 0) {
                             valid = 0;
                             break;
                         }
-                    }
-                    else
-                    {
+                        netImprovement += scoreImprovement_PerSpecies[i];
+                    } else {
                         speciesEdgeStat[i] = 0;
                     }
                 }
-                if (valid == 0)
-                {
-                    // This configuration is not valid
+
+                // Confirm configuration is valid
+                if (valid == 0) {
                     continue;
                 }
+
                 // compute the prior
                 double ePrior = log(speciesData->getEdgeStatusProb(speciesEdgeStat));
-                netImprovement = netImprovement + ePrior - oldpriorScore;
+                netImprovement = netImprovement + ePrior - oldPrior;
 
-                if (netImprovement > bestImprovement)
-                {
+                if (netImprovement > bestImprovement) {
                     bestImprovement = netImprovement;
                     csetid = setIter;
                 }
-                // cout << "condition"<<setIter <<": ePrior=" << ePrior << " oldpriorScore=" << oldpriorScore << " netImprovementwPrior=" << netImprovement << endl;
-                speciesEdgeStat.clear();
             }
-            // cout << "Best condition: "<<csetid << " bestImprovement=" << bestImprovement << endl;
-            if (csetid == -1) // add nothing
-            {
+
+            // If we couldn't find a score improving configuration of edges, continue.
+            if (csetid == -1) {
                 continue;
             }
-            if (bestImprovement > bestScoreImprovement_TF) // ePrior is added
-            {
-                // best condition:
+
+            if (bestImprovement > bestScoreImprovement_TF) {
                 vector<int> &cset = condsetMap_Tree[csetid];
                 bestscore_PerSpecies.clear();
                 bestscoreImprovement_PerSpecies.clear();
                 besttarget_PerSpecies.clear();
                 besttf_PerSpecies.clear();
-                for (int i = 0; i < cset.size(); i++)
-                {
-                    if (cset[i] == 0)
-                    {
+                for (int i = 0; i < cset.size(); i++) {
+                    if (cset[i] == 0) {
                         continue;
                     }
                     bestscore_PerSpecies[i] = score_PerSpecies[i];
                     bestscoreImprovement_PerSpecies[i] = scoreImprovement_PerSpecies[i];
-                    besttarget_PerSpecies[i] = target_PerSpecies[i];
-                    besttf_PerSpecies[i] = tf_PerSpecies[i];
+                    besttarget_PerSpecies[i] = targetID;
+                    besttf_PerSpecies[i] = regulatorID;
                 }
                 bestcsetid = csetid;
                 bestScoreImprovement_TF = bestImprovement;
-                bestregi = regi; // inputRegulatorOGs vector index
-                //cout << "regi="<<regi << " regOGID=" << regOGIter << " targeti=" << targeti << " targetOGID=" << targetOGIter <<" best condition: "<<bestcsetid << " bestImprovement=" << bestImprovement << endl;
+                bestRegulatorID = regulatorID;
             }
-            score_PerSpecies.clear();
-            scoreImprovement_PerSpecies.clear();
-            target_PerSpecies.clear();
-            tf_PerSpecies.clear();
         }
 
-        // add the best regulator for this target:
-        if (bestcsetid == -1) // edge status cset[specID]
-        {
+        // If we didnt find a score improving regulator for this target, continue.
+        if (bestcsetid == -1) {
             continue;
         }
+
         vector<int> &cset = condsetMap_Tree[bestcsetid];
-        //cout << "best condition bestcsetid=" << bestcsetid << endl;
-        for (int i = 0; i < cset.size(); i++)
-        {
-            if (cset[i] == 0)
-            {
+
+        for (int i = 0; i < cset.size(); i++) {
+            if (cset[i] == 0) {
                 continue;
             }
             MetaMove *move = new MetaMove;
-            move->setSrcVertex(besttf_PerSpecies[i]); // TF variable id
-            move->setTFID(bestregi);                  // inputRegulatorOGs vector index
+            move->setSrcVertex(besttf_PerSpecies[i]);
+            move->setTFID(bestRegulatorID);
             move->setConditionSetInd(i);
-            move->setTargetVertex(besttarget_PerSpecies[i]); // target variable id
-            move->setTargetID(targeti);                      // inputOGList vector index
+            move->setTargetVertex(besttarget_PerSpecies[i]);
+            move->setTargetID(targetID);
             move->setTargetMBScore(bestscore_PerSpecies[i]);
             move->setScoreImprovement(bestscoreImprovement_PerSpecies[i]);
             moveSet.push_back(move);
         }
-        besttarget_PerSpecies.clear();
-        bestscore_PerSpecies.clear();
-        besttf_PerSpecies.clear();
-        bestscoreImprovement_PerSpecies.clear();
     }
     return 0;
 }
 
-int MetaLearner::collectMoves_Orthogroups_INDEP(int currK)
+int MetaLearner::collectMoves_INDEP(int currK)
 {
-    cout << "MetaLearner::collectMoves_Orthogroups_INDEP" << endl;
+    cout << "MetaLearner::collectMoves_INDEP" << endl;
 
     for (int i = 0; i < moveSet.size(); i++)
     {
         delete moveSet[i];
     }
     moveSet.clear();
-    map<int, MappedOrthogroup *> &orthogroupSet = ogr->getMappedOrthogroups();
+
+    int numSpecies = speciesIDNameMap.size();
 
     // Now we will have a move for one orthogroup at a time
-    for (int targeti = 0; targeti < inputOGList.size(); targeti++)
-    {
-        int targetOGIter = inputOGList[targeti];
-        MappedOrthogroup *targetogrp = orthogroupSet[targetOGIter]; // oIter->second; four species
-        vector<string> &targetgrpMembers = targetogrp->getOrthoMembers();
-        int n = speciesIDNameMap.size();
+    for (int i = 0; i < targetList.size(); i++) {
+        int targetID = targetList[i];
 
         // score the score of best regulator:
-        vector<double> bestscore_PerSpecies(n, 0);
-        vector<double> bestscoreImprovement_PerSpecies(n, 0);
-        vector<int> besttarget_PerSpecies(n, -1);
-        vector<int> besttf_PerSpecies(n, -1);
+        vector<double> bestscore_PerSpecies(numSpecies, 0);
+        vector<double> bestscoreImprovement_PerSpecies(numSpecies, 0);
+        vector<int> besttarget_PerSpecies(numSpecies, -1);
+        vector<int> besttf_PerSpecies(numSpecies, -1);
         int bestcsetid = -1;
-        vector<double> bestScoreImprovementTF(n, 0);
+        vector<double> bestScoreImprovementTF(numSpecies, 0);
+
         // The logic of this is we will basically search for the utility of each regulator across every species. The datalikelihood
         // term is computed separately from the prior. Then we will consider what will happen if were to make moves for all species.
 
-        // we need to start from children to parents:loop from end of speciesIDNameMap to start of it!
-        for (int specID = 0; specID < speciesIDNameMap.size(); specID++)
-        {
-            string spec = speciesIDNameMap[specID]; // specIter->second;
+        for (int specID = 0; specID < speciesIDNameMap.size(); specID++) {
+            string spec = speciesIDNameMap[specID];
             SpeciesDataManager *sdm = speciesDataSet[specID];
             FactorGraph *speciesGraph = sdm->getFactorGraph();
             VariableManager *vMgr = sdm->getVariableManager();
-            vector<Variable *> &varSet = vMgr->getVariableSet();
-            int targetID = vMgr->getVarID(targetgrpMembers[specID].c_str());
-            if (targetID == -1)
-            {
-                // cout << "gene not present in " << spec  << " targetgene=" << targetgrpMembers[specID] << " regvaribleID=" << regID << " targetvaribleID=" << targetID << endl;
+
+            // Ensure that the target is present in this species' dataset.
+            Variable *target = vMgr->getVariable(targetID);
+            if (target == nullptr) {
                 continue;
             }
-            int bestregi = -1;
-            // for each regulator
-            for (int regi = 0; regi < inputRegulatorOGs.size(); regi++)
-            {
-                int regOGIter = inputRegulatorOGs[regi];
-                if (regOGIter == targetOGIter) // if(regOGIter->first==oIter->first)
-                {
-                    continue;
-                }
-                MappedOrthogroup *tfogrp = orthogroupSet[regOGIter]; // orthogroupSet[regOGIter->first];
-                vector<string> &tfgrpMembers = tfogrp->getOrthoMembers();
-                int regID = vMgr->getVarID(tfgrpMembers[specID].c_str());
-                if (regID == -1)
-                {
-                    //cout << "regulators not present in " << spec << " TFname=" << tfgrpMembers[specID] << " regvaribleID=" << regID << " targetvaribleID=" << targetID << endl;
-                    continue;
-                }
-                // If the species has multiple genes in it's list, we consider the member which will give the max improvement, that is
-                // highest data likelihood. Similarly, we will extract the highest likelihood if there are multiple regulators
-                double maxScore = -999999;
-                double maxScoreImprovement = -999999;
-                // Best here makes sense only if there are multiple TFs and targets
-                int bestTarget = -1;
-                int bestTF = -1;
-                Variable *target = varSet[targetID];
-                SlimFactor *sFactor = speciesGraph->getFactorAt(targetID);
-                // If the edge already exists in the MB of sFactor continue
-                if (sFactor->mergedMB.find(regID) != sFactor->mergedMB.end())
-                {
-                    // cout <<"Edge exists in the MB of sFactor" << endl;
-                    continue;
-                }
-                if (sFactor->mergedMB.size() >= currK)
-                {
-                    continue;
-                }
-                Variable *reg = varSet[regID];
 
-                // Otherwise get the score delta of adding this reguluator in sFactor's MB.
+            int bestRegulatorID = -1;
+
+            for (int j = 0; j < regulatorList.size(); j++) {
+                int regulatorID = regulatorList[j];
+
+                if (targetID == regulatorID) {
+                    continue;
+                }
+
+                // Ensure regulator exists in this species' dataset.
+                Variable *regulator = vMgr->getVariable(regulatorID);
+                if (regulator == nullptr) {
+                    continue;
+                }
+
+                SlimFactor *sFactor = speciesGraph->getFactor(targetID);
+
+                // If the edge already exists in the MB of sFactor continue
+                if (sFactor->mergedMB.find(regulatorID) != sFactor->mergedMB.end()) {
+                    continue;
+                }
+
+                // If the target already has the max num edges, continue.
+                if (sFactor->mergedMB.size() >= currK) {
+                    continue;
+                }
+
                 double scoreImprovement = 0;
                 double newScore = 0;
-                double newTargetScore = 0;
-                getNewPLLScore(specID, reg, target, newScore, scoreImprovement, targetOGIter);
-                // cout << "specID=" << specID <<" regi=" << regi <<  " regOGID=" << regOGIter  <<" targeti=" << targeti << " targetOGID=" <<targetOGIter << " TFname=" << tfgrpMembers[specID] <<" targetgene=" << targetgrpMembers[specID] << " regvaribleID=" << regID << " targetvaribleID=" <<targetID << " scoreImprovement=" << scoreImprovement << " newScore=" << newScore << endl;
-                // Now we wish to see how good it would be add these edges in different groups
-                //  create my own edge status: add this one or not
-                int regAdd = -1;
-                if (scoreImprovement > 0) //&& (scoreImprovement>maxScoreImprovement))
-                {
-                    bestTarget = targetID; // variable index
-                    bestTF = regID;        // variable index
-                    maxScoreImprovement = scoreImprovement;
-                    maxScore = newScore;
-                    regAdd = 1;
-                }
-                else
-                {
+                getNewPLLScore(specID, regulator, target, newScore, scoreImprovement);
+
+                if (scoreImprovement <= 0 || scoreImprovement <= bestScoreImprovementTF[specID]) {
                     continue;
                 }
 
-                // add this one or not
-                if (maxScoreImprovement > bestScoreImprovementTF[specID]) // ePrior is added
-                {
-                    bestscore_PerSpecies[specID] = maxScore;
-                    bestscoreImprovement_PerSpecies[specID] = maxScoreImprovement;
-                    besttarget_PerSpecies[specID] = bestTarget;
-                    besttf_PerSpecies[specID] = bestTF;
-                    // bestregWt_PerSpecies->clear(); //pointer to old unordered_map<int,double>* regwtforspecies
-                    // bestregWt_PerSpecies=regwtforspecies;
-                    bestcsetid = regAdd;
-                    bestScoreImprovementTF[specID] = maxScoreImprovement;
-                    bestregi = regi;
-                }
-            }     // all inputRegulatorOGs(regulators) end
+                bestscore_PerSpecies[specID] = newScore;
+                bestscoreImprovement_PerSpecies[specID] = scoreImprovement;
+                besttarget_PerSpecies[specID] = targetID;
+                besttf_PerSpecies[specID] = regulatorID;
+                bestcsetid = 1;
+                bestScoreImprovementTF[specID] = scoreImprovement;
+                bestRegulatorID = regulatorID;
+            }
 
-            // add the regulator: bestcsetid=1 add bestcsetid=0 continue
-            if (bestcsetid != 1 || bestscoreImprovement_PerSpecies[specID] <= 0) // edge status cset[specID]
-            {
+            if (bestcsetid != 1 || bestscoreImprovement_PerSpecies[specID] <= 0) {
                 continue;
             }
+
             MetaMove *move = new MetaMove;
             move->setSrcVertex(besttf_PerSpecies[specID]);
-            move->setTFID(bestregi);
+            move->setTFID(bestRegulatorID);
             move->setConditionSetInd(specID);
             move->setTargetVertex(besttarget_PerSpecies[specID]);
-            move->setTargetID(targeti);
+            move->setTargetID(targetID);
             move->setTargetMBScore(bestscore_PerSpecies[specID]);
             move->setScoreImprovement(bestscoreImprovement_PerSpecies[specID]);
             moveSet.push_back(move);
-        } // species dataset end
-        besttarget_PerSpecies.clear();
-        bestscore_PerSpecies.clear();
-        besttf_PerSpecies.clear();
-        bestscoreImprovement_PerSpecies.clear();
-        bestScoreImprovementTF.clear();
+        }
     }
     return 0;
 }
 
-// currPrior is the species-specific prior, which we do not need
-// priorScore is computed by not counted
-// getNewPLLScore(specID,*cset,reg,target,newScore,scoreImprovement,oIter->first,regwt);
-// shilu: removed INTINTMAP& conditionSet
 // u is reg and v is target
 // species-specific prior: sum_reg[log(p)]+sum_nonreg[log(1-p)]
 // score=likelihood+species-specific prior:
-int MetaLearner::getNewPLLScore(int cid, Variable *u, Variable *v, double &targetmbScore, double &scoreImprovement, int orthoGrpNo)
+void MetaLearner::getNewPLLScore(int cid, Variable *u, Variable *v, double &targetmbScore, double &scoreImprovement)
 {
     SpeciesDataManager *sdm = speciesDataSet[cid];
     FactorGraph *fg = sdm->getFactorGraph();
-    SlimFactor *dFactor = fg->getFactorAt(v->getID()); // target
-    vector<double> &varNeighborhoodPrior = varNeighborhoodPrior_PerSpecies[cid];
-    vector<vector<double>> &edgePresenceProb = edgePresenceProb_PerSpecies[cid];
+    SlimFactor *dFactor = fg->getFactor(v->getID()); // target
+    unordered_map<int, double> &varNeighborhoodPrior = varNeighborhoodPrior_PerSpecies[cid];
+    unordered_map<int, unordered_map<int, double>> &edgePresenceProb = edgePresenceProb_PerSpecies[cid];
     double currPrior = varNeighborhoodPrior[v->getID()]; // target
     bool toDel_d = true;
     // already checked mergedMB before computing getNewPLLScore
@@ -1128,20 +925,13 @@ int MetaLearner::getNewPLLScore(int cid, Variable *u, Variable *v, double &targe
     for (auto mIter = dFactor->mergedMB.begin(); mIter != dFactor->mergedMB.end(); mIter++)
     {
         double p = edgePresenceProb[*mIter][v->getID()];
-        // update by Shilu to avoid inf
-        if (p == 0 or p == 1)
-        {
+        if (p == 0 || p == 1) {
             continue;
         }
-        else
-        {
-            minus = minus + log(1 - p);
-            plus = plus + log(p);
-        }
-        
+        minus = minus + log(1 - p);
+        plus = plus + log(p);
     }
-    double pll_d = getPLLScore_Condition_Tracetrick(cid, dFactor, status);
-    //cout << "MetaLearner::getNewPLLScore cell=" << cid << " regID=" << u->getID() << " varID=" << v->getID()  << " currPrior="<< currPrior << " pll_d="<< pll_d << endl;
+    double pll_d = getPLLScore(cid, dFactor, status);
     if (status == -1)
     {
         scoreImprovement = -1;
@@ -1150,123 +940,88 @@ int MetaLearner::getNewPLLScore(int cid, Variable *u, Variable *v, double &targe
             auto dIter = dFactor->mergedMB.find(u->getID());
             dFactor->mergedMB.erase(dIter);
         }
-        return 0;
+        return;
     }
     currPrior = currPrior + plus - minus;
-    //cout << "cell=" << cid << " regID=" << u->getID() << " varID=" << v->getID() << " oldsparsityPrior=" << varNeighborhoodPrior[v->getID()] << " sparsityPriorchanged=" << plus - minus << " currsparsityPrior=" << currPrior << " pll_d=" << pll_d << " newscore=" << pll_d + currPrior << " oldscore=" << dFactor->mbScore << endl;
     pll_d = pll_d + currPrior;
     targetmbScore = pll_d;
     // Don't include the prior. Just use the data likelihood improvement
     double dImpr = targetmbScore - dFactor->mbScore;
-    if (dImpr <= 0)
-    {
-        scoreImprovement = -1;
-    }
-    else
-    {
-        scoreImprovement = dImpr;
-    }
-    if (toDel_d)
-    {
+    scoreImprovement = (dImpr <= 0) ? -1 : dImpr;
+    if (toDel_d) {
         auto dIter = dFactor->mergedMB.find(u->getID());
         dFactor->mergedMB.erase(dIter);
     }
-    //cout << "getPLLScore_Condition_Tracetrick likelihood=" << pll_d << " dFactor->mbScore=" << dFactor->mbScore << " in " << speciesIDNameMap[cid] << " for regID=" << u->getID() << " varID=" << v->getID()  << " status=" << status << " toDel_d=" << toDel_d << endl;
-
-    return 0;
 }
 
-// shilu: more efficient version
-double
-MetaLearner::getPLLScore_Condition_Tracetrick(int specID, SlimFactor *sFactor, int &status) // sFactor is target, unordered_map<int,double>& regWts
+double MetaLearner::getPLLScore(int specID, SlimFactor *sFactor, int &status)
 {
-    PotentialManager *potMgr = speciesDataSet[specID]->getPotentialManager(); // grab managers
+    PotentialManager *potMgr = speciesDataSet[specID]->getPotentialManager();
     double pll = potMgr->computePotentialMBCovMean(sFactor, status);
     return pll;
 }
 
-// prior probability: between regulator j and target k as a logistic function, remove motifweight
-// tfID is variable ID for regulator, targetID is variable ID for target.
-double
-MetaLearner::getEdgePrior_PerSpecies(int tfID, int targetID, SpeciesDataManager *sdm)
+
+double MetaLearner::getEdgePrior(int tfID, int targetID, SpeciesDataManager *sdm)
 {
-    INTDBLMAP *regPriors = NULL;
-    // double prior=1/(1+exp(-1*beta1));
     double motifweight = 0;
-    // double chipweight=0;
+
+    // Pull weight from the motif network, if it exists.
     unordered_map<int, unordered_map<int, double> *> &motifNetwork = sdm->getMotifNetwork();
-    if (motifNetwork.find(tfID) != motifNetwork.end())
-    {
+    if (motifNetwork.find(tfID) != motifNetwork.end()) {
         unordered_map<int, double> *values = motifNetwork[tfID];
-        if (values->find(targetID) != values->end())
-        {
+        if (values->find(targetID) != values->end()) {
             motifweight = (*values)[targetID];
-            //cout << "tfID=" << tfID << " targetID=" << targetID << " motifweight=" << motifweight << " prior=" << 1 / (1 + exp(-1 * (beta1 + motifweight * beta2))) << endl;
         }
     }
+
+    // prior probability between regulator j and target k as a logistic function
     double fwt = motifweight * beta2;
     double prior = 1 / (1 + exp(-1 * (beta1 + fwt)));
-    if (prior < 1e-6)
-    {
-        prior = 1e-6;
-    }
-    if (prior == 1)
-    {
-        prior = 1 - 1e-6;
-    }
-    //cout << "tfID=" << tfID << " targetID=" << targetID << " motifweight=" << motifweight << " beta1=" << beta1 << " beta2=" << beta2<< " prior=" << prior<< endl;
+
+    // Don't allow prior to be 1 or 0.
+    prior = (prior < 1e-6) ? 1e-6 : prior;
+    prior = (prior == 1) ? 1 - 1e-6 : prior;
+
     return prior;
 }
 
-double
-MetaLearner::makeMoves(int &successMove)
+double MetaLearner::makeMoves(int &successMove)
 {
     double netScoreDelta = 0;
     for (int m = 0; m < moveSet.size(); m++)
     {
         MetaMove *move = moveSet[m];
-        if (attemptMove(move) == 0)
-        {
-            successMove++;
-            netScoreDelta = netScoreDelta + move->getScoreImprovement();
-        }
-        else
-        {
-            cout << "Move not valid " << endl;
-        }
+        attemptMove(move);
+        successMove++;
+        netScoreDelta = netScoreDelta + move->getScoreImprovement();
     }
     return netScoreDelta;
 }
 
-// affectedVars not needed, each target is added only once
-int MetaLearner::attemptMove(MetaMove *move)
+void MetaLearner::attemptMove(MetaMove *move)
 {
     int specID = move->getConditionSetInd();
+    int regulatorID = move->getTFID();
+    int targetID = move->getTargetID();
     SpeciesDataManager *sdm = speciesDataSet[specID];
-    int regi = move->getTFID();        // inputRegulatorOGs vector index
-    int targeti = move->getTargetID(); // inputOGList vector index
     FactorGraph *csGraph = sdm->getFactorGraph();
-    SlimFactor *dFactor = csGraph->getFactorAt(move->getTargetVertex());
-    dFactor->mergedMB.insert(move->getSrcVertex()); // Aug 23: dFactor->mergedMB[move->getSrcVertex()]=0;
+    SlimFactor *dFactor = csGraph->getFactor(move->getTargetVertex());
+    dFactor->mergedMB.insert(move->getSrcVertex());
     dFactor->mbScore = move->getTargetMBScore();
 
-    vector<int> *newEdgeStatus; // STRINTMAP* newEdgeStatus=NULL;
-    char ogpair[20];
-    sprintf(ogpair, "%d-%d", regi, targeti);
-    string ogpairKey(ogpair);
-    // cout <<"Attempting move " << ogpairKey << " in species " << speciesIDNameMap[specID] << endl;
-    if (affectedOGPairs.find(ogpairKey) == affectedOGPairs.end())
-    {
-        newEdgeStatus = new vector<int>(speciesIDNameMap.size(), 0); // new STRINTMAP;
-        affectedOGPairs[ogpairKey] = newEdgeStatus;
+    char varPair[20];
+    sprintf(varPair, "%d-%d", regulatorID, targetID);
+    string varPairKey(varPair);
+
+    vector<int> *newEdgeStatus;
+    if (affectedVarPairs.find(varPairKey) == affectedVarPairs.end()) {
+        newEdgeStatus = new vector<int>(speciesIDNameMap.size(), 0);
+        affectedVarPairs[varPairKey] = newEdgeStatus;
+    } else {
+        newEdgeStatus = affectedVarPairs[varPairKey];
     }
-    else
-    {
-        newEdgeStatus = affectedOGPairs[ogpairKey];
-    }
-    // string& species=speciesIDNameMap[specID];
     (*newEdgeStatus)[specID] = 1;
-    return 0;
 }
 
 int MetaLearner::dumpAllGraphs(int currK)
@@ -1280,253 +1035,55 @@ int MetaLearner::dumpAllGraphs(int currK)
         sprintf(aFName, "%s/var_mb_pw_k%d.txt", dirname, currK);
         ofstream oFile(aFName);
         FactorGraph *fg = sdm->getFactorGraph();
-        vector<Variable *> &varSet = sdm->getVariableManager()->getVariableSet();
-        vector<SlimFactor *> &factorSet = fg->getAllFactors();
         PotentialManager *potMgr = sdm->getPotentialManager();
-        for (int aIter = 0; aIter < factorSet.size(); aIter++)
-        {
-            SlimFactor *sFactor = factorSet[aIter];
-            potMgr->dumpVarMB_PairwiseFormat(sFactor, oFile, varSet);
+        VariableManager *vMgr = sdm->getVariableManager();
+        vector<Variable*>& variableSet = vMgr->getVariableSet();
+        for (int j = 0; j < variableSet.size(); j++) {
+            Variable *target = variableSet[j];
+            SlimFactor *sFactor = fg->getFactor(target->getID());
+            potMgr->dumpVarMB(sFactor, oFile);
         }
         oFile.close();
     }
     return 0;
 }
 
-int MetaLearner::showModelParameters()
+void MetaLearner::showModelParameters()
 {
     char aFName[1024];
     for (int i = 0; i < speciesDataSet.size(); i++)
     {
         SpeciesDataManager *sdm = speciesDataSet[i];
+        VariableManager *vMgr = sdm->getVariableManager();
+        PotentialManager *potMgr = sdm->getPotentialManager();
+        FactorGraph *fg = sdm->getFactorGraph();
+
         const char *dirname = sdm->getOutputLoc();
         sprintf(aFName, "%s/modelparams.txt", dirname);
         ofstream oFile(aFName);
-        FactorGraph *fg = sdm->getFactorGraph();
-        PotentialManager *potMgr = sdm->getPotentialManager();
-        vector<SlimFactor *> &slimFactorSet = fg->getAllFactors();
-        vector<Variable *> &varSet = sdm->getVariableManager()->getVariableSet();
-        for (auto sIter = slimFactorSet.begin(); sIter != slimFactorSet.end(); sIter++)
-        {
-            SlimFactor *sFactor = *sIter;
+
+        vector<Variable*>& variableSet = vMgr->getVariableSet();
+        for (int j = 0; j < variableSet.size(); j++) {
+            Variable *var = variableSet[j];
+            SlimFactor *sFactor = fg->getFactor(var->getID());
+
             double mbcondvar = 0;
             double mbbias = 0;
             unordered_map<int, double> mbwt;
             potMgr->computePotentialMBCovMean(sFactor, mbcondvar, mbbias, mbwt);
-            Variable *var = varSet[sFactor->fId];
+
             oFile << "Var=" << var->getName() << "\tWt=-1" << "\tCondVar=" << mbcondvar << "\tCondBias=" << mbbias << "\tCondWt=";
-            for (auto dIter = mbwt.begin(); dIter != mbwt.end(); dIter++)
-            {
-                if (dIter != mbwt.begin())
-                {
+
+            for (auto dIter = mbwt.begin(); dIter != mbwt.end(); dIter++) {
+                if (dIter != mbwt.begin()) {
                     oFile << ",";
                 }
-                Variable *mbVar = varSet[dIter->first];
+                Variable *mbVar = vMgr->getVariable(dIter->first);
                 oFile << mbVar->getName() << "=" << dIter->second;
             }
             oFile << endl;
-            mbwt.clear();
         }
+
         oFile.close();
     }
-    return 0;
-}
-
-int MetaLearner::generateData(int sampleCnt, int burnin)
-{
-    map<int, ofstream *> newdataFiles;
-    gsl_rng *rndgen = gsl_rng_alloc(gsl_rng_default);
-    map<int, map<int, Potential *> *> potSet;
-
-    for (int i = 0; i < speciesDataSet.size(); i++)
-    {
-        // int gid=speciesNameIDMap[gIter->first];
-        FactorGraph *fg = speciesDataSet[i]->getFactorGraph();
-        VariableManager *varMgr = speciesDataSet[i]->getVariableManager();
-        vector<Variable *> &varSet = varMgr->getVariableSet();
-        map<int, Potential *> *pSet = new map<int, Potential *>;
-        potSet[i] = pSet;
-        PotentialManager *potMgr = speciesDataSet[i]->getPotentialManager();
-        for (map<string, int>::iterator vIter = subgraphVarSet.begin(); vIter != subgraphVarSet.end(); vIter++)
-        {
-            int vId = vIter->second;
-            SlimFactor *sFactor = fg->getFactorAt(vId);
-            Potential *sPot = new Potential;
-            (*pSet)[vId] = sPot;
-            sPot->setAssocVariable(varSet[sFactor->fId], Potential::FACTOR);
-            for (auto mIter = sFactor->mergedMB.begin(); mIter != sFactor->mergedMB.end(); mIter++)
-            {
-                Variable *aVar = varSet[*mIter];
-                sPot->setAssocVariable(aVar, Potential::MARKOV_BNKT);
-            }
-            sPot->potZeroInit();
-            potMgr->populatePotential(sPot);
-            sPot->initMBCovMean();
-        }
-    }
-
-    for (int i = 0; i < speciesDataSet.size(); i++)
-    {
-        SpeciesDataManager *sdm = speciesDataSet[i];
-        char fileName[1024];
-        sprintf(fileName, "%s/newsamples.txt", sdm->getOutputLoc());
-        ofstream *oFile = new ofstream(fileName);
-        newdataFiles[i] = oFile;
-        // Write the model file
-        sprintf(fileName, "%s/newmodel.txt", sdm->getOutputLoc());
-        ofstream mFile(fileName);
-        mFile << "NodeCnt\t" << subgraphVarSet.size() << endl;
-        mFile << "ContinuousNodes";
-        int nodeId = 0;
-        for (map<string, int>::iterator vIter = subgraphVarSet.begin(); vIter != subgraphVarSet.end(); vIter++)
-        {
-            mFile << "\t" << nodeId;
-            nodeId++;
-        }
-        mFile << endl;
-        mFile << "DiscreteNodes" << endl;
-        nodeId = 0;
-        for (map<string, int>::iterator vIter = subgraphVarSet.begin(); vIter != subgraphVarSet.end(); vIter++)
-        {
-            mFile << "NodeName=" << vIter->first << "\tNodeID=" << nodeId << "\tParents="
-                  << "\tChildren="
-                  << "\tValues=0,1,2" << endl;
-            nodeId++;
-        }
-        mFile.close();
-    }
-
-    for (map<int, map<int, Potential *> *>::iterator psIter = potSet.begin(); psIter != potSet.end(); psIter++)
-    {
-        int did = psIter->first;
-        INTDBLMAP initialSample;
-        INTDBLMAP saveSample;
-        int iter = 0;
-        map<int, Potential *> *pSet = psIter->second;
-        generateInitSample(initialSample, rndgen, pSet);
-
-        while (iter < (sampleCnt + burnin))
-        {
-            int selectFirst = 0;
-            // We just need to align localmodelid with the outputfile to which the data is generated
-            if (iter >= burnin)
-            {
-                if (iter == burnin)
-                {
-                    cout << "Starting to write" << endl;
-                }
-                writeEvidenceTo(newdataFiles[did], initialSample);
-            }
-            for (map<string, int>::iterator vIter = subgraphVarSet.begin(); vIter != subgraphVarSet.end(); vIter++)
-            {
-                saveSample[vIter->second] = initialSample[vIter->second];
-                FactorGraph *fg = speciesDataSet[psIter->first]->getFactorGraph();
-                SlimFactor *sFactor = fg->getFactorAt(vIter->second);
-                Potential *sPot = (*pSet)[vIter->second];
-                double sample_s = sPot->generateSample(initialSample, sFactor->fId, rndgen);
-                int siter = 0;
-                while ((sample_s < -160 || sample_s > 160) && (siter < 50))
-                {
-                    sample_s = sPot->generateSample(initialSample, sFactor->fId, rndgen);
-                    siter++;
-                }
-                if (sample_s < -160)
-                {
-                    sample_s = -160;
-                }
-                else if (sample_s > 160)
-                {
-                    sample_s = 160;
-                }
-                if ((isnan(sample_s)) || (isinf(sample_s)))
-                {
-                    cout << "Found Nan/Inf for " << sFactor->fId << "=" << sample_s << " Neighbors: ";
-                    for (auto mbIter = sFactor->mergedMB.begin(); mbIter != sFactor->mergedMB.end(); mbIter++)
-                    {
-                        cout << " " << *mbIter << "=" << initialSample[*mbIter];
-                    }
-                    cout << endl;
-                }
-                initialSample[sFactor->fId] = sample_s;
-            }
-            iter++;
-        }
-    }
-    gsl_rng_free(rndgen);
-    cout << "Bottom clips " << endl;
-    for (map<string, int>::iterator sIter = bottomClip.begin(); sIter != bottomClip.end(); sIter++)
-    {
-        cout << sIter->first.c_str() << " " << sIter->second << endl;
-    }
-    cout << "Top clips " << endl;
-    for (map<string, int>::iterator sIter = topClip.begin(); sIter != topClip.end(); sIter++)
-    {
-        cout << sIter->first.c_str() << " " << sIter->second << endl;
-    }
-    return 0;
-}
-
-int MetaLearner::generateInitSample(INTDBLMAP &initialSample, gsl_rng *rndgen, map<int, Potential *> *pSet)
-{
-    double globalMean = 0;
-    globalVar = 0;
-    for (map<string, int>::iterator vIter = subgraphVarSet.begin(); vIter != subgraphVarSet.end(); vIter++)
-    {
-        int vId = vIter->second;
-        Potential *sPot = (*pSet)[vId];
-        cout << vId << "\t" << sPot->getCondBias() << "\t" << sPot->getCondVariance() << endl;
-        globalMean = globalMean + sPot->getCondBias();
-        globalVar = globalVar + sPot->getCondVariance();
-    }
-    double norm = (double)(subgraphVarSet.size() * speciesDataSet.size());
-    globalMean = globalMean / norm;
-    globalVar = globalVar / norm;
-    for (map<string, int>::iterator vIter = subgraphVarSet.begin(); vIter != subgraphVarSet.end(); vIter++)
-    {
-        double sampleval = gsl_ran_gaussian(rndgen, sqrt(globalVar));
-        sampleval = sampleval + globalMean;
-        initialSample[vIter->second] = sampleval;
-    }
-    return 0;
-}
-
-int MetaLearner::writeEvidenceTo(ofstream *oFile, INTDBLMAP &sample)
-{
-    int nodeId = 0;
-    for (map<string, int>::iterator dIter = subgraphVarSet.begin(); dIter != subgraphVarSet.end(); dIter++)
-    {
-        if (dIter != subgraphVarSet.begin())
-        {
-            (*oFile) << "\t";
-        }
-        double val = sample[dIter->second];
-        if (val < -160)
-        {
-            val = -160;
-            if (bottomClip.find(dIter->first) == bottomClip.end())
-            {
-                bottomClip[dIter->first] = 1;
-            }
-            else
-            {
-                bottomClip[dIter->first] = bottomClip[dIter->first] + 1;
-            }
-        }
-        else if (val > 160)
-        {
-            val = 160;
-            if (topClip.find(dIter->first) == topClip.end())
-            {
-                topClip[dIter->first] = 1;
-            }
-            else
-            {
-                topClip[dIter->first] = topClip[dIter->first] + 1;
-            }
-        }
-        (*oFile) << nodeId << "=[" << exp(val) << "]";
-        nodeId++;
-    }
-    (*oFile) << endl;
-    return 0;
 }

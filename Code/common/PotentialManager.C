@@ -28,7 +28,6 @@
 #include "Utils.H"
 #include "VariableManager.H"
 
-
 using namespace std::chrono;
 
 PotentialManager::PotentialManager()
@@ -82,84 +81,42 @@ PotentialManager::setOutputDir(const char* aDirName)
 	return 0;
 }
 
-Error::ErrorCode
-PotentialManager::loadEvidenceFromTable(vector<string>& inputTable)
+void
+PotentialManager::loadEvidenceFromTable(const vector<string>& inputTable, const vector<string>& variableList)
 {
-    /* Reads gene names and expression levels from a tab-separated file, where the first row is assumed (for now)
-       to be headers. In subsequent rows, the first column is a gene name and remaining columns are expression levels.
-       This method does what VariableManager::readVariables() does for .model and .data files.
-    */
+    // Reads gene names and expression levels from a tab-separated file. 
+    // The first column is a gene name and remaining columns are expression levels.
     
-    // First, let's collect the values per sample. The table has them per gene...
-    //vector<vector<double>> valuesPerSample;
-    int nodeCount = inputTable.size();
-    // How many samples do we have?
-    vector<string> substrs = Utils::split(inputTable[0], '\t');
-    int sampleCount = substrs.size() - 1;  // not counting the gene name
-    data=new Matrix(nodeCount,sampleCount);
-    int nodeNum = 0;
-    vMgr = new VariableManager;
-    for (auto line : inputTable)
-    {
-        substrs = Utils::split(line, '\t');
-        // set variable name:
-        string nodeName = substrs[0];
-        vMgr->readVariablesFromData(nodeName,nodeNum);
-        for (int sample = 0; sample < sampleCount; sample++)
-        {
-            double varVal =stod(substrs[sample + 1]);
-            //valuesPerSample[sample][nodeNum] =varVal;
-            data->setValue(varVal,nodeNum,sample);
-        }
-        ++nodeNum;
-    }
-    testdataSize=sampleCount;
-    cout <<"PotentialManager::loadEvidenceFromTable varCount=" << data->getRowCnt() << " sampleCount=" << data->getColCnt()  << endl;
-    substrs.clear();
-    return Error::SUCCESS;
-}
+    int varCount = variableList.size();
 
-Error::ErrorCode
-PotentialManager::loadEvidenceFromTable(vector<string>& inputTable,unordered_set<string>& inputVariableNames)
-{
-    /* Reads gene names and expression levels from a tab-separated file, where the first row is assumed (for now)
-       to be headers. In subsequent rows, the first column is a gene name and remaining columns are expression levels.
-       This method does what VariableManager::readVariables() does for .model and .data files.
-    */
-    
-    // First, let's collect the values per sample. The table has them per gene...
-    //vector<vector<double>> valuesPerSample;
-    int nodeCount = inputVariableNames.size();
-    // How many samples do we have?
+    // Count the columns and subtract 1 (for the gene name column) to get sample count.
     vector<string> substrs = Utils::split(inputTable[0], '\t');
-    int sampleCount = substrs.size() - 1;  // not counting the gene name
-    data=new Matrix(nodeCount,sampleCount);
-    int nodeNum = 0;
+    int sampleCount = substrs.size() - 1;
+
+    data = new Matrix(varCount, sampleCount);
     vMgr = new VariableManager;
-    for (auto line : inputTable)
-    {
+
+    for (auto line : inputTable) {
         substrs = Utils::split(line, '\t');
-        // set variable name:
-        string nodeName = substrs[0];
-        if(inputVariableNames.find(nodeName)!=inputVariableNames.end())
-        {
-            vMgr->readVariablesFromData(nodeName,nodeNum);
-            for (int sample = 0; sample < sampleCount; sample++)
-            {
-                double varVal =stod(substrs[sample + 1]);
-                //valuesPerSample[sample][nodeNum] =varVal;
-                data->setValue(varVal,nodeNum,sample);
-            }
-            ++nodeNum;
-        }/*else{
-            cout << nodeName << " is not in GeneList" << endl;
-        }*/
-        
+        string varName = substrs[0];
+
+        vector<string>::const_iterator iter = find(variableList.begin(), variableList.end(), varName);
+
+        // Variable list restricts which genes we include, so if it isn't present, skip it.
+        if (iter == variableList.end()) {
+            continue;
+        }
+
+        int varIndex = distance(variableList.begin(), iter);
+        vMgr->addVariable(varName, varIndex);
+
+        for (int sample = 0; sample < sampleCount; sample++) {
+            double varVal = stod(substrs[sample + 1]);
+            data->setValue(varVal, varIndex, sample);
+        }
     }
-    testdataSize=sampleCount;
-    cout <<"PotentialManager::loadEvidenceFromTable varCount=" << data->getRowCnt() << " sampleCount=" << data->getColCnt()  << endl;
-    substrs.clear();
-    return Error::SUCCESS;
+    testdataSize = sampleCount;
+    cout << "PotentialManager::loadEvidenceFromTable varCount=" << data->getRowCnt() << " sampleCount=" << data->getColCnt()  << endl;
 }
 
 VariableManager*
@@ -202,7 +159,7 @@ PotentialManager::reset()
 }
 
 int
-PotentialManager::estimateCovariance_Eff(int uId, int vId)
+PotentialManager::estimateCovariance(int uId, int vId)
 {
     double vmean=meanMat->getValue(vId,0);
     double umean=meanMat->getValue(uId,0);
@@ -214,176 +171,173 @@ PotentialManager::estimateCovariance_Eff(int uId, int vId)
     return 0;
 }
 
-//precompute covMat and meanMat:
-// compute mbcondVar[CondVariance], mbcondMean_Part[CondBias], mbcondMean_Vect[CondWeight]
 double
-PotentialManager::computePotentialMBCovMean(SlimFactor* sFactor, int& status)//unordered_map<int,double>& mbcondMean_Vect)
+PotentialManager::computePotentialMBCovMean(SlimFactor* sFactor, int& status)
 {
-    int mbsize=sFactor->mergedMB.size();
-    if(mbsize==0)
-    {
+    int mbsize = sFactor->mergedMB.size();
+    if (mbsize == 0) {
         return 0;
     }
-    vector <int> ParChildID(sFactor->mergedMB.begin(),sFactor->mergedMB.end());
-    ParChildID.push_back(sFactor->fId); //the last one is target
+
+    vector<int> parChildID(sFactor->mergedMB.begin(), sFactor->mergedMB.end());
+    parChildID.push_back(sFactor->fId);
+
     //extract covariance
-    Matrix* covariance=new Matrix(ParChildID.size(),ParChildID.size());
-    for(int i=0;i<ParChildID.size();i++) {
-        int vIter=ParChildID[i];  //index in covMat
-        for(int j=i;j<ParChildID.size();j++)
-        {
-            int uIter=ParChildID[j];  //index in covMat
-            double cval=covMat->getValue(vIter,uIter);
-            covariance->setValue(cval,i,j);
-            covariance->setValue(cval,j,i);
+    Matrix* covariance = new Matrix(parChildID.size(), parChildID.size());
+    for (int i = 0; i < parChildID.size(); i++) {
+        int vID = parChildID[i];
+        for (int j = i; j < parChildID.size(); j++) {
+            int uID = parChildID[j];
+            double cval = covMat->getValue(vID, uID);
+            covariance->setValue(cval, i, j);
+            covariance->setValue(cval, j, i);
         }
     }
-    int vId=sFactor->fId;
-    double determinant=covariance->detMatrix();
-    if(determinant<=0) //<1e-50)
-    {
-        //cout <<"Negative/Zero Determinant " << determinant << " for Target=" << sFactor->fId <<endl;
-        status=-1;
+
+    double determinant = covariance->detMatrix();
+    if (determinant <= 0) {
+        status = -1;
         return 0;
     }
-    double mbcondVar=covMat->getValue(vId,vId);
+
+    int vId = sFactor->fId;
+    double mbcondVar = covMat->getValue(vId, vId);
     
-    Matrix* mbcov=covariance->getSubMatrix(0,0,mbsize,mbsize);
-    Matrix* mbmargvar=covariance->getSubMatrix(ParChildID.size()-1,0,1,mbsize);
-    double determinantP=mbcov->detMatrix();
-    if(determinantP<=0) //<1e-50
-    {
-        //cout <<"Negative/Zero Determinant Parent " << determinantP << " for Target=" << sFactor->fId <<endl;
+    Matrix* mbcov = covariance->getSubMatrix(0, 0, mbsize, mbsize);
+    Matrix* mbmargvar = covariance->getSubMatrix(parChildID.size() - 1, 0, 1, mbsize);
+
+    double determinantP = mbcov->detMatrix();
+    if (determinantP <= 0) {
+        status = -1;
+        return 0;
+    }
+
+    Matrix* covInv = mbcov->invMatrix();
+    Matrix* prod1 = mbmargvar->multiplyMatrix(covInv);
+
+    for (int i = 0; i < parChildID.size() - 1; i++) {
+        int varID = parChildID[i];
+        double aVal = prod1->getValue(0, i);
+        double bVal = mbmargvar->getValue(0, i);
+        mbcondVar = mbcondVar - (aVal * bVal);
+    }
+
+    if (mbcondVar < 0) {
         status=-1;
         return 0;
     }
 
-    Matrix* covInv=mbcov->invMatrix();
-    Matrix* prod1=mbmargvar->multiplyMatrix(covInv);
-
-    for(int i=0;i<ParChildID.size()-1;i++)  //start from parent only, last one is target
-    {
-        int varID=ParChildID[i];
-        double aVal=prod1->getValue(0,i);
-        double bVal=mbmargvar->getValue(0,i);
-        mbcondVar=mbcondVar-(aVal*bVal);
-    }
-    if(mbcondVar<0){
-        status=-1;
-        return 0;
-    }
-    double jointll1 = computeLL(ParChildID.size(), determinant);
+    double jointll1 = computeLL(parChildID.size(), determinant);
     double jointll2 = computeLL(mbsize, determinantP);
     double pll = jointll1 - jointll2;
-    if(isinf(pll)){
+
+    if (isinf(pll)) {
         status=-1;
         return 0;
     }
-    
-    ParChildID.clear();
+
     delete covariance;
     delete mbcov;
     delete mbmargvar;
     delete covInv;
     delete prod1;
+
     return pll;
 }
 
-int
-PotentialManager::dumpVarMB_PairwiseFormat(SlimFactor* sFactor, ofstream& oFile, VSET& varSet)
+void
+PotentialManager::dumpVarMB(SlimFactor* sFactor, ofstream& oFile)
 {
-    int mbsize=sFactor->mergedMB.size();
-    if(mbsize==0)
-    {
-        return 0;
+    int mbsize = sFactor->mergedMB.size();
+    if (mbsize == 0) {
+        return;
     }
-    vector <int> ParChildID(sFactor->mergedMB.begin(),sFactor->mergedMB.end());
-    ParChildID.push_back(sFactor->fId); //the last one is target
+
+    Variable* target = vMgr->getVariable(sFactor->fId);
+
+    vector<int> parChildID(sFactor->mergedMB.begin(), sFactor->mergedMB.end());
+    parChildID.push_back(sFactor->fId);
+
     //extract covariance
-    Matrix* covariance=new Matrix(ParChildID.size(),ParChildID.size());
-    for(int i=0;i<ParChildID.size();i++) {
-        int vIter=ParChildID[i];  //index in covMat
-        for(int j=i;j<ParChildID.size();j++)
-        {
-            int uIter=ParChildID[j];  //index in covMat
-            double cval=covMat->getValue(vIter,uIter);
-            covariance->setValue(cval,i,j);
-            covariance->setValue(cval,j,i);
+    Matrix* covariance = new Matrix(parChildID.size(), parChildID.size());
+    for(int i = 0; i < parChildID.size(); i++) {
+        int vID = parChildID[i];
+        for(int j = i; j < parChildID.size(); j++) {
+            int uID = parChildID[j];
+            double cval = covMat->getValue(vID, uID);
+            covariance->setValue(cval, i, j);
+            covariance->setValue(cval, j, i);
         }
     }
 
-    Matrix* mbcov=covariance->getSubMatrix(0,0,mbsize,mbsize); //Matrix* mbcov=new Matrix(mbsize,mbsize);
-    Matrix* mbmargvar=covariance->getSubMatrix(ParChildID.size()-1,0,1,mbsize); //Matrix* mbmargvar=new Matrix(1,mbsize); covariance(vId,j)
+    Matrix* mbcov = covariance->getSubMatrix(0, 0, mbsize, mbsize);
+    Matrix* mbmargvar = covariance->getSubMatrix(parChildID.size() - 1, 0, 1, mbsize);
 
-    Matrix* covInv=mbcov->invMatrix();
-    Matrix* prod1=mbmargvar->multiplyMatrix(covInv);
+    Matrix* covInv = mbcov->invMatrix();
+    Matrix* prod1 = mbmargvar->multiplyMatrix(covInv);
 
-    for(int i=0;i<ParChildID.size()-1;i++)  //start from parent only, last one id=ParChildID.size()-1 is target
-    {
-        int varID=ParChildID[i];
-        double aVal=prod1->getValue(0,i); // aVal is conditional weight
-        oFile << varSet[varID]->getName()<< "\t"<< varSet[sFactor->fId]->getName() << "\t" << aVal << endl;
+    // Start from parent only, last one id=ParChildID.size()-1 is target
+    for(int i = 0; i < parChildID.size() - 1; i++) {
+        Variable* parent = vMgr->getVariable(parChildID[i]);
+        double conditionalWeight = prod1->getValue(0, i);
+        oFile << parent->getName() << "\t"<< target->getName() << "\t" << conditionalWeight << endl;
     }
 
-    ParChildID.clear();
     delete covariance;
     delete mbcov;
     delete mbmargvar;
     delete covInv;
     delete prod1;
-    return 0;
 }
 
-// compute mbcondVar[CondVariance], mbcondMean_Part[CondBias], mbcondMean_Vect[CondWeight]
-// for MetaLearner::showModelParameters() final parameters
-int
+void
 PotentialManager::computePotentialMBCovMean(SlimFactor* sFactor, double& mbcondVar, double& mbbias, unordered_map<int,double>& mbcondMean_Vect)
 {
-    int mbsize=sFactor->mergedMB.size();
-    if(mbsize==0)
-    {
-        return 0;
+    int mbsize = sFactor->mergedMB.size();
+    if (mbsize == 0) {
+        return;
     }
-    vector <int> ParChildID(sFactor->mergedMB.begin(),sFactor->mergedMB.end());
-    ParChildID.push_back(sFactor->fId); //the last one is target
+
+    vector <int> parChildID(sFactor->mergedMB.begin(), sFactor->mergedMB.end());
+    parChildID.push_back(sFactor->fId);
+
     //extract covariance
-    Matrix* covariance=new Matrix(ParChildID.size(),ParChildID.size());
-    for(int i=0;i<ParChildID.size();i++) {
-        int vIter=ParChildID[i];  //index in covMat
-        for(int j=i;j<ParChildID.size();j++)
-        {
-            int uIter=ParChildID[j];  //index in covMat
-            double cval=covMat->getValue(vIter,uIter);
-            covariance->setValue(cval,i,j);
-            covariance->setValue(cval,j,i);
+    Matrix* covariance = new Matrix(parChildID.size(), parChildID.size());
+    for(int i = 0; i < parChildID.size(); i++) {
+        int vID = parChildID[i];
+        for(int j = i; j < parChildID.size(); j++) {
+            int uID = parChildID[j];
+            double cval = covMat->getValue(vID, uID);
+            covariance->setValue(cval, i, j);
+            covariance->setValue(cval, j, i);
         }
     }
-    int vId=sFactor->fId;
-    mbcondVar=covMat->getValue(vId,vId);
-    mbbias=meanMat->getValue(vId,0);
-    
-    Matrix* mbcov=covariance->getSubMatrix(0,0,mbsize,mbsize);
-    Matrix* mbmargvar=covariance->getSubMatrix(ParChildID.size()-1,0,1,mbsize);
-    Matrix* covInv=mbcov->invMatrix();
-    Matrix* prod1=mbmargvar->multiplyMatrix(covInv);
 
-    for(int i=0;i<ParChildID.size()-1;i++)  //start from parent only, last one is target
-    {
-        int varID=ParChildID[i];
-        double aVal=prod1->getValue(0,i);
-        double bVal=mbmargvar->getValue(0,i);
-        mbcondVar=mbcondVar-(aVal*bVal);
-        mbcondMean_Vect[varID]=aVal;  // mbcondMean_Vect is conditional weight
-        double cVal= meanMat->getValue(varID,0); //meanWrap[aIter->second];
-        mbbias=mbbias-(cVal*aVal);
+    int vId = sFactor->fId;
+    mbcondVar = covMat->getValue(vId, vId);
+    mbbias = meanMat->getValue(vId, 0);
+
+    Matrix* mbcov = covariance->getSubMatrix(0, 0, mbsize, mbsize);
+    Matrix* mbmargvar = covariance->getSubMatrix(parChildID.size() - 1, 0, 1, mbsize);
+    Matrix* covInv = mbcov->invMatrix();
+    Matrix* prod1 = mbmargvar->multiplyMatrix(covInv);
+
+    // Start from parent only, last one is target
+    for(int i = 0; i < parChildID.size() - 1; i++) {
+        int varID = parChildID[i];
+        double conditionalWeight = prod1->getValue(0, i);
+        double bVal = mbmargvar->getValue(0, i);
+        mbcondVar = mbcondVar - (conditionalWeight * bVal);
+        mbcondMean_Vect[varID] = conditionalWeight;
+        double cVal = meanMat->getValue(varID, 0);
+        mbbias = mbbias - (cVal * conditionalWeight);
     }
-    ParChildID.clear();
+
     delete covariance;
     delete mbcov;
     delete mbmargvar;
     delete covInv;
     delete prod1;
-    return 0;
 }
 
 double
@@ -408,7 +362,7 @@ PotentialManager::populatePotential(Potential* aPot)
             double cval=covMat->getValue(vIter->first,uIter->first);
             if(cval==-1)
             {
-                estimateCovariance_Eff(vIter->first,uIter->first);
+                estimateCovariance(vIter->first,uIter->first);
                 //cerr <<"No var " << uIter->first << " in covariance of " << vIter->first << endl;
                 //exit(-1);
             }
@@ -422,7 +376,7 @@ PotentialManager::populatePotential(Potential* aPot)
 }
 
 double
-PotentialManager::computeMeanVarPseudoLikelihood_onefold(int id) //SlimFactor* sFactor,VSET& varSet)
+PotentialManager::computeMeanVarPseudoLikelihood(int id)
 {
     // compute meanMat and Variance on covMat, PseudoLikelihood
     double vmean=data->RowMean(id);
@@ -434,10 +388,9 @@ PotentialManager::computeMeanVarPseudoLikelihood_onefold(int id) //SlimFactor* s
     double variance=ssd/(dataSetSize-1.0)+1e-10;  //(0.001+ssd)/((double)(data->getColCnt()-1))
     covMat->setValue(variance,id,id);
     double pll=-0.5*ssd/variance-0.5*log(2.0*PI*variance)*dataSetSize;
-    //cout << "PotentialManager::computeMeanVarPseudoLikelihood_onefold id="<<id<<" variance=" <<variance << " mean=" << vmean << " ssd=" << ssd << " dataSetSize=" << dataSetSize <<" pll=" << pll << endl;
     for(int j=id+1;j<data->getRowCnt();j++)
     {
-        estimateCovariance_Eff(id,j);
+        estimateCovariance(id,j);
     }
     return pll;
 }

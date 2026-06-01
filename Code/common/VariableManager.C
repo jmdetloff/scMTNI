@@ -18,62 +18,44 @@
 #include <stdlib.h>
 #include <string>
 #include <vector>
-#include "Error.H"
-#include "Utils.H"
 #include "Variable.H"
 #include "VariableManager.H"
 
-Error::ErrorCode
-VariableManager::readVariablesFromTable(vector<string>& inputTable)
-{
-	int nodeCount = inputTable.size();
-	int nodeID = 0;
-	for (auto line : inputTable)
-	{
-		vector<string> substrs = Utils::split(line, '\t');
-		string nodeName = substrs[0];
-		Variable* var = new Variable;
-		var->setID(nodeID);
-		var->setName(nodeName.c_str());
-        variableSet.push_back(var);
-		varNameIDMap[nodeName] = nodeID;
-		++nodeID;
-	}
-	cout << "Read information about " << nodeCount << " variables" << endl;
-	return Error::SUCCESS;
-}
-
-Error::ErrorCode
-VariableManager::readVariablesFromData(string nodeName,int nodeID)
+void
+VariableManager::addVariable(string varName, int varID)
 {
     Variable* var = new Variable;
-    var->setID(nodeID);
-    var->setName(nodeName.c_str());
-    variableSet.push_back(var);
-    varNameIDMap[nodeName] = nodeID;
-    return Error::SUCCESS;
+    var->setID(varID);
+    var->setName(varName);
+    variables.push_back(var);
 }
 
-int
-VariableManager::getVarID(const char* varName)
+Variable*
+VariableManager::getVariable(string varName)
 {
-	string varKey(varName);
-	if(varNameIDMap.find(varKey)==varNameIDMap.end())
-	{
-		return -1;
+	for (int i = 0; i < variables.size(); i++) {
+		Variable* var = variables[i];
+		if (var->getName() == varName) {
+			return var;
+		}
 	}
-	int vId=varNameIDMap[varKey];
-	return vId;
+	return nullptr;
+}
+
+Variable*
+VariableManager::getVariable(int varID)
+{
+	for (int i = 0; i < variables.size(); i++) {
+		Variable* var = variables[i];
+		if (var->getID() == varID) {
+			return var;
+		}
+	}
+	return nullptr;
 }
 
 vector<Variable*>&
 VariableManager::getVariableSet()
 {
-	return variableSet;
-}
-
-Variable* 
-VariableManager::getVariableAt(int vId)
-{
-	return variableSet[vId];
+	return variables;
 }

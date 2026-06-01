@@ -22,35 +22,24 @@ FactorGraph::FactorGraph()
 
 FactorGraph::~FactorGraph()
 {
-	for(auto fIter=factorSet.begin();fIter!=factorSet.end();fIter++)
-	{
-		delete *fIter;
+	for(auto fIter = factors.begin(); fIter != factors.end(); fIter++) {
+		delete fIter->second;
 	}
-	factorSet.clear();
 }
 
-int 
-FactorGraph::setFactor(SlimFactor* sFactor)
+void FactorGraph::addFactor(int varID)
 {
-    //index same as sFactor->fId, start from 0
-    factorSet.push_back(sFactor);
-	return 0;
+	SlimFactor* sFactor = new SlimFactor;
+	sFactor->fId = varID;
+	factors[varID] = sFactor;
 }
 
-int 
-FactorGraph::getFactorCnt()
+int FactorGraph::getFactorCnt()
 {
-	return factorSet.size();
+	return factors.size();
 }
 
-SlimFactor* 
-FactorGraph::getFactorAt(int fid)
+SlimFactor* FactorGraph::getFactor(int varID)
 {
-	return factorSet[fid];
-}
-
-vector<SlimFactor*>&
-FactorGraph::getAllFactors()
-{
-	return factorSet;
+	return factors[varID];
 }

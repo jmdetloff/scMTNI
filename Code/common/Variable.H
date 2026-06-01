@@ -15,13 +15,12 @@ typedef vector<Variable*>::iterator VSET_ITER;
 class Variable
 {
 	public:
-		//This is how the variable will be used throughout
-		//the system
-		int setID(int);
+		// This is how the variable will be used throughout the system
+		void setID(int);
 		int getID();
 
-		//This is the name assigned to the variable by the user
-		int setName(const char*);
+		// This is the name assigned to the variable by the user
+		void setName(string name);
 		const string& getName();
 
 	private:
