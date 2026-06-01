@@ -17,7 +17,6 @@
 #include <cstring>
 #include <stdlib.h>
 #include <unistd.h>
-#include "GeneMap.H"
 #include "MappedOrthogroup.H"
 #include "MappedOrthogroupReader.H"
 
