@@ -31,15 +31,14 @@ SpeciesDataManager::setVariableManager(VariableManager* aPtr)
 int
 SpeciesDataManager::createFactorGraph()
 {
-	vector<Variable*>& variableSet=varMgr->getVariableSet();
+	vector<Variable*>& variableSet = varMgr->getVariableSet();
 	
-	fgraph=new FactorGraph;
-	//Create the factors and the Markov blanket variables using the neighbours of each variable
-    for(int globalFactorID=0;globalFactorID<variableSet.size();globalFactorID++)
+	fgraph = new FactorGraph;
+
+    for(int i = 0; i < variableSet.size(); i++)
 	{
-		SlimFactor* sFactor=new SlimFactor;
-		sFactor->fId=globalFactorID;  //same as vIds
-		fgraph->setFactor(sFactor);
+		Variable *var = variableSet[i];
+		fgraph->addFactor(var->getID());
 	}
 	return 0;
 }
@@ -95,11 +94,15 @@ SpeciesDataManager::setMotifNetwork(const char* aPtr)
 			tokCnt++;
 		}
 
-		int tfID=varMgr->getVarID(tfName.c_str());
-		int tgtID=varMgr->getVarID(tgtName.c_str());
-		if(tfID==-1 || tgtID==-1){
+		Variable* regulator = varMgr->getVariable(tfName);
+		Variable* target = varMgr->getVariable(tgtName);
+		if(regulator == nullptr || target == nullptr) {
 			continue;
 		}
+
+		int tfID = regulator->getID();
+		int tgtID = target->getID();
+
         unordered_map<int,double>* tgtSet=NULL;
 		if(motifNetwork.find(tfID)==motifNetwork.end())
 		{
@@ -111,7 +114,6 @@ SpeciesDataManager::setMotifNetwork(const char* aPtr)
 			tgtSet=motifNetwork[tfID];
 		}
 		(*tgtSet)[tgtID]=score;
-		//cout << "TFvarID=" << tfID << " targetvarID=" << tgtID << " " << tfName << "->" << tgtName<<  "="<< score<<endl; 
 	}
 	cout << "motifNetwork.size() = " << motifNetwork.size() << endl;
 	inFile.close();

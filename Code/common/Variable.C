@@ -14,11 +14,10 @@
 
 #include "Variable.H"
 
-int 
-Variable::setName(const char* aStr)
+void
+Variable::setName(string aStr)
 {
-	name.append(aStr);
-	return 0;
+	name = aStr;
 }
 
 const string& 
@@ -27,11 +26,10 @@ Variable::getName()
 	return name;
 }
 
-int
+void
 Variable::setID(int aId)
 {
-	vId=aId;
-	return 0;
+	vId = aId;
 }
 
 int

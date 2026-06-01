@@ -31,16 +31,15 @@ class PotentialManager
 		int init();
 		int reset();
         int populatePotential(Potential* aPot);
-        Error::ErrorCode loadEvidenceFromTable(vector<string>& inputLines);
-        Error::ErrorCode loadEvidenceFromTable(vector<string>& inputTable,unordered_set<string>& inputVariableNames);
+        void loadEvidenceFromTable(const vector<string>& inputTable, const vector<string>& variableList);
         VariableManager* getVariableManager();
-        double computeMeanVarPseudoLikelihood_onefold(int);
-        double computePotentialMBCovMean(SlimFactor* sFactor,int&);
-        int computePotentialMBCovMean(SlimFactor* sFactor, double& mbcondvar, double& mbbias, unordered_map<int,double>& mbcondMean_Vect);
-        int dumpVarMB_PairwiseFormat(SlimFactor* sFactor, ofstream& oFile, VSET& varSet);
+        double computeMeanVarPseudoLikelihood(int);
+        double computePotentialMBCovMean(SlimFactor* sFactor, int&);
+        void computePotentialMBCovMean(SlimFactor* sFactor, double& mbcondvar, double& mbbias, unordered_map<int,double>& mbcondMean_Vect);
+        void dumpVarMB(SlimFactor* sFactor, ofstream& oFile);
 
 	private:
-		int estimateCovariance_Eff(int, int);
+		int estimateCovariance(int, int);
 		double computeLL(int dim, double determinant);
 
 		char outputDir[1024];
