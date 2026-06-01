@@ -34,7 +34,6 @@
 
 #include "SpeciesDistance.H"
 #include "SpeciesDataManager.H"
-#include "GeneMap.H"
 #include "MappedOrthogroup.H"
 #include "MappedOrthogroupReader.H"
 #include "MetaLearner.H"
@@ -760,7 +759,6 @@ int MetaLearner::collectMoves_Orthogroups(int currK)
     {
         int targetOGIter = inputOGList[targeti];
         MappedOrthogroup *targetogrp = orthogroupSet[targetOGIter]; // oIter->second; four species
-        // map<string,GeneMap*>& targetgrpMembers=targetogrp->getOrthoMembers();
         vector<string> &targetgrpMembers = targetogrp->getOrthoMembers();
         int n = speciesIDNameMap.size();
 
@@ -786,7 +784,6 @@ int MetaLearner::collectMoves_Orthogroups(int currK)
                 continue;
             }
             MappedOrthogroup *tfogrp = orthogroupSet[regOGIter]; // orthogroupSet[regOGIter->first];
-            // map<string,GeneMap*>& tfgrpMembers=tfogrp->getOrthoMembers();
             vector<string> &tfgrpMembers = tfogrp->getOrthoMembers();
             double oldpriorScore = ogpairPrior[regi][targeti]; // double oldpriorScore=ogpairPrior[ogPair];
 
@@ -817,13 +814,6 @@ int MetaLearner::collectMoves_Orthogroups(int currK)
                     //cout << "regulators or gene not present in " << spec << " TFname=" << tfgrpMembers[specID] << " targetgene=" << targetgrpMembers[specID] << " regvaribleID=" << regID << " targetvaribleID=" << targetID << endl;
                     continue;
                 }
-                /*
-                //GeneMap* geneMap_Tgts=specIter->second;
-                GeneMap* geneMap_Tgts=targetgrpMembers[spec]; //GeneMap* geneMap_Tgts=targetgrpMembers[specIter->first];
-                map<string,map<string,STRINTMAP*>*>& speciesTargetSet=geneMap_Tgts->getGeneSet();
-                GeneMap* geneMap_TFs=tfgrpMembers[spec]; //GeneMap* geneMap_TFs=tfgrpMembers[specIter->first];
-                map<string,map<string,STRINTMAP*>*>& speciesTFSet=geneMap_TFs->getGeneSet();
-                 */
                 // If the species has multiple genes in it's list, we consider the member which will give the max improvement, that is
                 // highest data likelihood. Similarly, we will extract the highest likelihood if there are multiple regulators
                 double maxScore = -999999;
@@ -1048,7 +1038,6 @@ int MetaLearner::collectMoves_Orthogroups_INDEP(int currK)
     {
         int targetOGIter = inputOGList[targeti];
         MappedOrthogroup *targetogrp = orthogroupSet[targetOGIter]; // oIter->second; four species
-        // map<string,GeneMap*>& targetgrpMembers=targetogrp->getOrthoMembers();
         vector<string> &targetgrpMembers = targetogrp->getOrthoMembers();
         int n = speciesIDNameMap.size();
 
@@ -1100,7 +1089,6 @@ int MetaLearner::collectMoves_Orthogroups_INDEP(int currK)
                     continue;
                 }
                 MappedOrthogroup *tfogrp = orthogroupSet[regOGIter]; // orthogroupSet[regOGIter->first];
-                // map<string,GeneMap*>& tfgrpMembers=tfogrp->getOrthoMembers();
                 vector<string> &tfgrpMembers = tfogrp->getOrthoMembers();
                 int regID = vMgr->getVarID(tfgrpMembers[specID].c_str());
                 if (regID == -1)

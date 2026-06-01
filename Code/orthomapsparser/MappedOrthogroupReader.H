@@ -1,6 +1,7 @@
 #ifndef _ORTHOGROUP_READER
 #define _ORTHOGROUP_READER
 #include <map>
+#include "CommonTypes.H"
 using namespace std;
 
 class MappedOrthogroup;

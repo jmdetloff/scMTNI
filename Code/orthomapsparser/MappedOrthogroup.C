@@ -13,7 +13,6 @@
  *   */
 
 #include <iostream>
-#include "GeneMap.H"
 #include "MappedOrthogroup.H"
 
 int

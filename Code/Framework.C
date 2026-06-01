@@ -29,7 +29,6 @@ using namespace std;
 #include "PotentialManager.H"
 #include "MetaMove.H"
 
-#include "GeneMap.H"
 #include "MappedOrthogroup.H"
 #include "MappedOrthogroupReader.H"
 #include "SpeciesDistance.H"
