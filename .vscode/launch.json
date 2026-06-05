@@ -1,0 +1,24 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [{
+        "name": "Debug",
+        "type": "lldb",
+        "request": "launch",
+        "program": "${workspaceFolder}/Code/scMTNI",
+        "args": [
+            "-f", "ExampleData/testdata_config.txt",
+            "-x", "50",
+            "-l", "ExampleData/TFs.txt",
+            "-n", "ExampleData/AllGenes.txt",
+            "-d", "ExampleData/celltype_tree_ancestor.txt",
+            "-p", "0.2",
+            "-b", "-0.9",
+            "-q", "2"
+        ],
+        "preLaunchTask": "build",
+        "cwd": "${workspaceFolder}"
+    }]
+}
