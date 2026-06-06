@@ -15,13 +15,13 @@
 #include <iostream>
 #include <cstring>
 #include <math.h>
+#include <fstream>
 #include <gsl/gsl_blas.h>
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_matrix.h>
 #include "CommonTypes.H"
 #include "Error.H"
 #include "Variable.H"
-#include "Potential.H"
 #include "SlimFactor.H"
 #include "PotentialManager.H"
 #include <chrono>
@@ -303,7 +303,7 @@ PotentialManager::computePotentialMBCovMean(SlimFactor* sFactor, double& mbcondV
 double
 PotentialManager::computeLL(int dim, double determinant)
 {
-    double ll=testdataSize * (dim*log(2*PI)+log(determinant));
+    double ll=testdataSize * (dim*log(2*M_PI)+log(determinant));
     double t=dim*(testdataSize-1);
     ll=(ll+t)*(-0.5);
     return ll;
@@ -320,7 +320,7 @@ PotentialManager::computeMeanVarPseudoLikelihood(int id)
     //add 1e-10 to avoid singularity issues:
     double variance=ssd/(dataSetSize-1.0)+1e-10;  //(0.001+ssd)/((double)(data->getColCnt()-1))
     covMat->setValue(variance,id,id);
-    double pll=-0.5*ssd/variance-0.5*log(2.0*PI*variance)*dataSetSize;
+    double pll=-0.5*ssd/variance-0.5*log(2.0*M_PI*variance)*dataSetSize;
     for(int j=id+1;j<data->getRowCnt();j++)
     {
         estimateCovariance(id,j);
