@@ -206,12 +206,8 @@ void MetaLearner::initSpeciesData(string speciesName, string tableFileName, stri
     potMgr->setOutputDir(outputLoc.c_str());
     potMgr->loadEvidenceFromTable(inputTable, variableList);
 
-    VariableManager *varMgr = potMgr->getVariableManager();
-
     SpeciesDataManager *spMgr = new SpeciesDataManager;
-    spMgr->setVariableManager(varMgr);
     spMgr->setPotentialManager(potMgr);
-    spMgr->createFactors();
     spMgr->setOutputLoc(outputLoc.c_str());
     spMgr->setMotifNetwork(motifNetwork.c_str());
     speciesDataSet.push_back(spMgr);
@@ -222,9 +218,6 @@ void MetaLearner::initSpeciesData(string speciesName, string tableFileName, stri
 
     cout << datasetID << "=" << speciesName << " motifNetwork=" << motifNetwork << endl;
 
-    potMgr->reset();
-    potMgr->init();
-
     char foldOutputDirCmd[1024];
     sprintf(foldOutputDirCmd, "mkdir -p %s/fold0", outputLoc.c_str());
     system(foldOutputDirCmd);
@@ -232,6 +225,7 @@ void MetaLearner::initSpeciesData(string speciesName, string tableFileName, stri
     unordered_map<int, double> varNeighborhoodPrior;
     unordered_map<int, unordered_map<int, double>> edgePresenceProb;
 
+    VariableManager *varMgr = potMgr->getVariableManager();
     vector<Variable*>& variableSet = varMgr->getVariableSet();
     for (int i = 0; i < variableSet.size(); i++) {
         Variable *target = variableSet[i];

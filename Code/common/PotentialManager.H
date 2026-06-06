@@ -7,17 +7,12 @@
 #define _POTENTIAL_MANAGER
 
 #include <vector>
-#include <map>
 #include <unordered_map>
-#include <unordered_set>
 #include "Matrix.H"
-#include "gsl/gsl_randist.h"
 
 using namespace std;
 
-class Potential;
 class SlimFactor;
-class Error;
 class VariableManager;
 
 class PotentialManager
@@ -26,11 +21,8 @@ class PotentialManager
 		PotentialManager();
 		~PotentialManager();
 
-        int deleteData();
+        void deleteData();
 		int setOutputDir(const char*);
-		int init();
-		int reset();
-        int populatePotential(Potential* aPot);
         void loadEvidenceFromTable(const vector<string>& inputTable, const vector<string>& variableList);
         VariableManager* getVariableManager();
         double computeMeanVarPseudoLikelihood(int);
@@ -43,8 +35,6 @@ class PotentialManager
 		double computeLL(int dim, double determinant);
 
 		char outputDir[1024];
-		gsl_matrix* ludecomp;
-		gsl_permutation* perm;
         Matrix* data;
         Matrix* meanMat;
         Matrix* covMat;

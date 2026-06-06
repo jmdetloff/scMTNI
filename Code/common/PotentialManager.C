@@ -32,8 +32,6 @@ using namespace std::chrono;
 
 PotentialManager::PotentialManager()
 {
-	ludecomp=NULL;
-	perm=NULL;
     data=NULL;
     meanMat=NULL;
     covMat=NULL;
@@ -42,36 +40,23 @@ PotentialManager::PotentialManager()
 
 PotentialManager::~PotentialManager()
 {
-	if(ludecomp!=NULL)
-	{
-		gsl_matrix_free(ludecomp);
-	}
-	if(perm!=NULL)
-	{
-		gsl_permutation_free(perm);
-	}
-    if (data!=NULL)
-    {
+    if (data != NULL) {
         delete data;
     }
-		if (meanMat!=NULL)
-    {
+	if (meanMat != NULL) {
         delete meanMat;
     }
-    if (covMat!=NULL)
-    {
+    if (covMat != NULL) {
         delete covMat;
     }
 }
 
-int
+void
 PotentialManager::deleteData()
 {
-    if (data!=NULL)
-    {
+    if (data != NULL) {
         delete data;
     }
-    return 0;
 }
 
 int
@@ -115,47 +100,22 @@ PotentialManager::loadEvidenceFromTable(const vector<string>& inputTable, const 
             data->setValue(varVal, varIndex, sample);
         }
     }
+
     testdataSize = sampleCount;
+
     cout << "PotentialManager::loadEvidenceFromTable varCount=" << data->getRowCnt() << " sampleCount=" << data->getColCnt()  << endl;
+
+    int varCnt = data->getRowCnt();
+    meanMat = new Matrix(varCnt, 1);
+    meanMat->setAllValues(0);
+    covMat = new Matrix(varCnt, varCnt);
+    covMat->setAllValues(-1);
 }
 
 VariableManager*
 PotentialManager::getVariableManager()
 {
     return vMgr;
-}
-
-int
-PotentialManager::init()
-{
-    int varCnt=data->getRowCnt();
-    meanMat=new Matrix(varCnt,1);
-    meanMat->setAllValues(0);
-    covMat=new Matrix(varCnt,varCnt);
-    covMat->setAllValues(-1);
-    return 0;
-}
-
-int
-PotentialManager::reset()
-{
-    if (meanMat!=NULL)
-    {
-        delete meanMat;
-    }
-    if (covMat!=NULL)
-    {
-        delete covMat;
-    }
-	if(ludecomp!=NULL)
-	{
-		gsl_matrix_free(ludecomp);
-	}
-	if(perm!=NULL)
-	{
-		gsl_permutation_free(perm);
-	}
-	return 0;
 }
 
 int
@@ -349,32 +309,6 @@ PotentialManager::computeLL(int dim, double determinant)
     return ll;
 }
 
-int
-PotentialManager::populatePotential(Potential* aPot)
-{
-    unordered_map<int,Variable*>& potVars=aPot->getAssocVariables();
-    for(auto vIter=potVars.begin();vIter!=potVars.end(); vIter++)
-    {
-        double mean=meanMat->getValue(vIter->first,0);
-        aPot->updateMean(vIter->first,mean);
-        for(auto uIter=vIter;uIter!=potVars.end();uIter++)
-        {
-            double cval=covMat->getValue(vIter->first,uIter->first);
-            if(cval==-1)
-            {
-                estimateCovariance(vIter->first,uIter->first);
-                //cerr <<"No var " << uIter->first << " in covariance of " << vIter->first << endl;
-                //exit(-1);
-            }
-            cval=covMat->getValue(vIter->first,uIter->first);
-            aPot->updateCovariance(vIter->first,uIter->first,cval);
-            aPot->updateCovariance(uIter->first,vIter->first,cval);
-        }
-    }
-    aPot->makeValidJPD(ludecomp, perm);
-    return 0;
-}
-
 double
 PotentialManager::computeMeanVarPseudoLikelihood(int id)
 {
@@ -383,7 +317,6 @@ PotentialManager::computeMeanVarPseudoLikelihood(int id)
     meanMat->setValue(vmean,id,0);
     double dataSetSize=data->getColCnt();
     double ssd=data->vectorMultiply(id,vmean,id,vmean);
-    //double variance=covMat->getValue(id,id);
     //add 1e-10 to avoid singularity issues:
     double variance=ssd/(dataSetSize-1.0)+1e-10;  //(0.001+ssd)/((double)(data->getColCnt()-1))
     covMat->setValue(variance,id,id);

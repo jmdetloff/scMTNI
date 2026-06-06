@@ -1,13 +1,14 @@
 #ifndef _SLIM_FACTOR
 #define _SLIM_FACTOR
+
 #include <iostream>
 #include<unordered_set>
 #include<unordered_map>
+#include "CommonTypes.H"
+
 using namespace std;
 
-#include "CommonTypes.H"
 class Variable;
-class Potential;
 
 class SlimFactor
 {

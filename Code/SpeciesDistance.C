@@ -35,19 +35,18 @@ SpeciesDistance::~SpeciesDistance()
     speciesNameIDMap.clear();
 }
 
-int
+void
 SpeciesDistance::setProot(double aVal)
 {
-    proot=aVal;
-    return 0;
+    proot = aVal;
 }
 
-int
+void
 SpeciesDistance::setspeciesNameIDMap(unordered_map<string,int>& spNameIDMap){
-    speciesNameIDMap=spNameIDMap;
+    speciesNameIDMap = spNameIDMap;
 }
 
-int 
+void
 SpeciesDistance::readSpeciesTree(const char* aFName)
 {
 	ifstream inFile(aFName);
@@ -127,7 +126,6 @@ SpeciesDistance::readSpeciesTree(const char* aFName)
 	}
     cout <<"speciesSet.size()=" <<speciesSet.size() << " Root is " << root->name << endl;
 	inFile.close();
-	return 0;
 }
 
 // Returns the probability of a child status given a parent status, based on the gain and maintain probabilities on the child species.

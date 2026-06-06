@@ -27,17 +27,20 @@ SpeciesDataManager::~SpeciesDataManager()
 	}
 }
 
-int
-SpeciesDataManager::setVariableManager(VariableManager* aPtr)
+SlimFactor*
+SpeciesDataManager::getFactor(int varID)
 {
-	varMgr=aPtr;
-	return 0;
+	return factors[varID];
 }
 
 void
-SpeciesDataManager::createFactors()
+SpeciesDataManager::setPotentialManager(PotentialManager* aPtr)
 {
-	vector<Variable*>& variableSet = varMgr->getVariableSet();
+	potMgr = aPtr;
+
+	VariableManager *varManager = aPtr->getVariableManager();
+	vector<Variable*>& variableSet = varManager->getVariableSet();
+
     for(int i = 0; i < variableSet.size(); i++) {
 		Variable *var = variableSet[i];
 		SlimFactor* sFactor = new SlimFactor;
@@ -46,29 +49,17 @@ SpeciesDataManager::createFactors()
 	}
 }
 
-SlimFactor*
-SpeciesDataManager::getFactor(int varID)
-{
-	return factors[varID];
-}
-
-int 
-SpeciesDataManager::setPotentialManager(PotentialManager* aPtr)
-{
-	potMgr=aPtr;
-	return 0;
-}
-
-int
+void
 SpeciesDataManager::setOutputLoc(const char* aPtr)
 {
-	strcpy(outputLoc,aPtr);
-	return 0;
+	strcpy(outputLoc, aPtr);
 }
 
-int
+void
 SpeciesDataManager::setMotifNetwork(const char* aPtr)
 {
+	VariableManager* varMgr = potMgr->getVariableManager();
+
 	ifstream inFile(aPtr);
 	char buffer[1024];
 	while(inFile.good())
@@ -126,13 +117,12 @@ SpeciesDataManager::setMotifNetwork(const char* aPtr)
 	}
 	cout << "motifNetwork.size() = " << motifNetwork.size() << endl;
 	inFile.close();
-	return 0;
 }
 	
 VariableManager*
 SpeciesDataManager::getVariableManager()
 {
-	return varMgr;
+	return potMgr->getVariableManager();
 }
 
 PotentialManager*
