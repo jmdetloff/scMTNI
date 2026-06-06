@@ -18,8 +18,14 @@
 #include "Potential.H"
 #include "PotentialManager.H"
 #include "SlimFactor.H"
-#include "FactorGraph.H"
 #include "SpeciesDataManager.H"
+
+SpeciesDataManager::~SpeciesDataManager()
+{
+	for(auto fIter = factors.begin(); fIter != factors.end(); fIter++) {
+		delete fIter->second;
+	}
+}
 
 int
 SpeciesDataManager::setVariableManager(VariableManager* aPtr)
@@ -28,19 +34,22 @@ SpeciesDataManager::setVariableManager(VariableManager* aPtr)
 	return 0;
 }
 
-int
-SpeciesDataManager::createFactorGraph()
+void
+SpeciesDataManager::createFactors()
 {
 	vector<Variable*>& variableSet = varMgr->getVariableSet();
-	
-	fgraph = new FactorGraph;
-
-    for(int i = 0; i < variableSet.size(); i++)
-	{
+    for(int i = 0; i < variableSet.size(); i++) {
 		Variable *var = variableSet[i];
-		fgraph->addFactor(var->getID());
+		SlimFactor* sFactor = new SlimFactor;
+		sFactor->fId = var->getID();
+		factors[sFactor->fId] = sFactor;
 	}
-	return 0;
+}
+
+SlimFactor*
+SpeciesDataManager::getFactor(int varID)
+{
+	return factors[varID];
 }
 
 int 
@@ -124,12 +133,6 @@ VariableManager*
 SpeciesDataManager::getVariableManager()
 {
 	return varMgr;
-}
-
-FactorGraph*
-SpeciesDataManager::getFactorGraph()
-{
-	return fgraph;
 }
 
 PotentialManager*

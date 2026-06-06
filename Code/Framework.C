@@ -21,14 +21,10 @@ using namespace std;
 #include "Error.H"
 #include "Variable.H"
 #include "VariableManager.H"
-
 #include "Potential.H"
 #include "SlimFactor.H"
-
-#include "FactorGraph.H"
 #include "PotentialManager.H"
 #include "MetaMove.H"
-
 #include "SpeciesDistance.H"
 #include "SpeciesDataManager.H"
 #include "MetaLearner.H"
