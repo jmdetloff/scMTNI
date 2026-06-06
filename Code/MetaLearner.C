@@ -25,7 +25,6 @@
 #include "Error.H"
 #include "Variable.H"
 #include "VariableManager.H"
-#include "Potential.H"
 #include "SlimFactor.H"
 #include "PotentialManager.H"
 #include "MetaMove.H"
