@@ -6,27 +6,31 @@
 using namespace std;
 
 class VariableManager;
-class FactorGraph;
 class PotentialManager;
 
 class SpeciesDataManager
 {
 	public:
+		~SpeciesDataManager();
+
 		int setVariableManager(VariableManager*);
-		int createFactorGraph();
 		int setPotentialManager(PotentialManager*);
 		int setOutputLoc(const char*);
 		int setMotifNetwork(const char*);
+
 		VariableManager* getVariableManager();
-		FactorGraph* getFactorGraph();
 		PotentialManager* getPotentialManager();
 		const char* getOutputLoc();
 		unordered_map<int,unordered_map<int,double>*>& getMotifNetwork();
+
+		void createFactors();
+		SlimFactor* getFactor(int varID);
+
 	private:
 		VariableManager* varMgr;
-		FactorGraph* fgraph;
 		PotentialManager* potMgr;
 		char outputLoc[1024];
 		unordered_map<int,unordered_map<int,double>*> motifNetwork;
+		unordered_map<int, SlimFactor*> factors;
 };
 #endif

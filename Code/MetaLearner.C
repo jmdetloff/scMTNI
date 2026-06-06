@@ -19,24 +19,21 @@
 #include <string>
 #include <vector>
 #include <utility>
+#include <chrono>
+#include <unistd.h>
+
 #include "Error.H"
 #include "Variable.H"
 #include "VariableManager.H"
-
 #include "Potential.H"
 #include "SlimFactor.H"
 #include "PotentialManager.H"
-
-#include "FactorGraph.H"
 #include "MetaMove.H"
-
 #include "Utils.H"
-
 #include "SpeciesDistance.H"
 #include "SpeciesDataManager.H"
 #include "MetaLearner.H"
-#include <chrono>
-#include <unistd.h>
+
 using namespace std::chrono;
 using namespace std;
 
@@ -214,7 +211,7 @@ void MetaLearner::initSpeciesData(string speciesName, string tableFileName, stri
     SpeciesDataManager *spMgr = new SpeciesDataManager;
     spMgr->setVariableManager(varMgr);
     spMgr->setPotentialManager(potMgr);
-    spMgr->createFactorGraph();
+    spMgr->createFactors();
     spMgr->setOutputLoc(outputLoc.c_str());
     spMgr->setMotifNetwork(motifNetwork.c_str());
     speciesDataSet.push_back(spMgr);
@@ -232,14 +229,13 @@ void MetaLearner::initSpeciesData(string speciesName, string tableFileName, stri
     sprintf(foldOutputDirCmd, "mkdir -p %s/fold0", outputLoc.c_str());
     system(foldOutputDirCmd);
 
-    FactorGraph *condspecGraph = spMgr->getFactorGraph();
     unordered_map<int, double> varNeighborhoodPrior;
     unordered_map<int, unordered_map<int, double>> edgePresenceProb;
 
     vector<Variable*>& variableSet = varMgr->getVariableSet();
     for (int i = 0; i < variableSet.size(); i++) {
         Variable *target = variableSet[i];
-        SlimFactor *sFactor = condspecGraph->getFactor(target->getID());
+        SlimFactor *sFactor = spMgr->getFactor(target->getID());
         double pll = potMgr->computeMeanVarPseudoLikelihood(sFactor->fId);
         double priorScore = precomputePerSpeciesPrior(datasetID, target, spMgr, edgePresenceProb);
         varNeighborhoodPrior[sFactor->fId] = priorScore;
@@ -350,12 +346,12 @@ double MetaLearner::getScore()
     double gScore = 0;
 
     for (int i = 0; i < speciesDataSet.size(); i++) {
-        FactorGraph *fg = speciesDataSet[i]->getFactorGraph();
-        VariableManager *varMgr = speciesDataSet[i]->getVariableManager();
+        SpeciesDataManager *speciesDataManager = speciesDataSet[i];
+        VariableManager *varMgr = speciesDataManager->getVariableManager();
         vector<Variable*>& variableSet = varMgr->getVariableSet();
         for (int j = 0; j < variableSet.size(); j++) {
             Variable *var = variableSet[j];
-            SlimFactor *sFactor = fg->getFactor(var->getID());
+            SlimFactor *sFactor = speciesDataManager->getFactor(var->getID());
             gScore = gScore + sFactor->mbScore;
         }
     }
@@ -672,7 +668,6 @@ int MetaLearner::collectMoves(int currK)
             {
                 string spec = speciesIDNameMap[specID];
                 SpeciesDataManager *sdm = speciesDataSet[specID];
-                FactorGraph *speciesGraph = sdm->getFactorGraph();
                 VariableManager *vMgr = sdm->getVariableManager();
                 Variable *target = vMgr->getVariable(targetID);
                 Variable *regulator = vMgr->getVariable(regulatorID);
@@ -682,7 +677,7 @@ int MetaLearner::collectMoves(int currK)
                     continue;
                 }
 
-                SlimFactor *sFactor = speciesGraph->getFactor(targetID);
+                SlimFactor *sFactor = sdm->getFactor(targetID);
 
                 // If the edge already exists in the MB of sFactor continue
                 if (sFactor->mergedMB.find(regulatorID) != sFactor->mergedMB.end()) {
@@ -834,7 +829,6 @@ int MetaLearner::collectMoves_INDEP(int currK)
         for (int specID = 0; specID < speciesIDNameMap.size(); specID++) {
             string spec = speciesIDNameMap[specID];
             SpeciesDataManager *sdm = speciesDataSet[specID];
-            FactorGraph *speciesGraph = sdm->getFactorGraph();
             VariableManager *vMgr = sdm->getVariableManager();
 
             // Ensure that the target is present in this species' dataset.
@@ -858,7 +852,7 @@ int MetaLearner::collectMoves_INDEP(int currK)
                     continue;
                 }
 
-                SlimFactor *sFactor = speciesGraph->getFactor(targetID);
+                SlimFactor *sFactor = sdm->getFactor(targetID);
 
                 // If the edge already exists in the MB of sFactor continue
                 if (sFactor->mergedMB.find(regulatorID) != sFactor->mergedMB.end()) {
@@ -911,8 +905,7 @@ int MetaLearner::collectMoves_INDEP(int currK)
 void MetaLearner::getNewPLLScore(int cid, Variable *u, Variable *v, double &targetmbScore, double &scoreImprovement)
 {
     SpeciesDataManager *sdm = speciesDataSet[cid];
-    FactorGraph *fg = sdm->getFactorGraph();
-    SlimFactor *dFactor = fg->getFactor(v->getID()); // target
+    SlimFactor *dFactor = sdm->getFactor(v->getID()); // target
     unordered_map<int, double> &varNeighborhoodPrior = varNeighborhoodPrior_PerSpecies[cid];
     unordered_map<int, unordered_map<int, double>> &edgePresenceProb = edgePresenceProb_PerSpecies[cid];
     double currPrior = varNeighborhoodPrior[v->getID()]; // target
@@ -1005,8 +998,7 @@ void MetaLearner::attemptMove(MetaMove *move)
     int regulatorID = move->getTFID();
     int targetID = move->getTargetID();
     SpeciesDataManager *sdm = speciesDataSet[specID];
-    FactorGraph *csGraph = sdm->getFactorGraph();
-    SlimFactor *dFactor = csGraph->getFactor(move->getTargetVertex());
+    SlimFactor *dFactor = sdm->getFactor(move->getTargetVertex());
     dFactor->mergedMB.insert(move->getSrcVertex());
     dFactor->mbScore = move->getTargetMBScore();
 
@@ -1034,13 +1026,12 @@ int MetaLearner::dumpAllGraphs(int currK)
         const char *dirname = sdm->getOutputLoc();
         sprintf(aFName, "%s/var_mb_pw_k%d.txt", dirname, currK);
         ofstream oFile(aFName);
-        FactorGraph *fg = sdm->getFactorGraph();
         PotentialManager *potMgr = sdm->getPotentialManager();
         VariableManager *vMgr = sdm->getVariableManager();
         vector<Variable*>& variableSet = vMgr->getVariableSet();
         for (int j = 0; j < variableSet.size(); j++) {
             Variable *target = variableSet[j];
-            SlimFactor *sFactor = fg->getFactor(target->getID());
+            SlimFactor *sFactor = sdm->getFactor(target->getID());
             potMgr->dumpVarMB(sFactor, oFile);
         }
         oFile.close();
@@ -1056,7 +1047,6 @@ void MetaLearner::showModelParameters()
         SpeciesDataManager *sdm = speciesDataSet[i];
         VariableManager *vMgr = sdm->getVariableManager();
         PotentialManager *potMgr = sdm->getPotentialManager();
-        FactorGraph *fg = sdm->getFactorGraph();
 
         const char *dirname = sdm->getOutputLoc();
         sprintf(aFName, "%s/modelparams.txt", dirname);
@@ -1065,7 +1055,7 @@ void MetaLearner::showModelParameters()
         vector<Variable*>& variableSet = vMgr->getVariableSet();
         for (int j = 0; j < variableSet.size(); j++) {
             Variable *var = variableSet[j];
-            SlimFactor *sFactor = fg->getFactor(var->getID());
+            SlimFactor *sFactor = sdm->getFactor(var->getID());
 
             double mbcondvar = 0;
             double mbbias = 0;
