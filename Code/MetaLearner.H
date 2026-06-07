@@ -49,10 +49,9 @@ class MetaLearner
 		double getPriorDelta();
 		void precomputeEmptyGraphPrior();
 		double precomputePerSpeciesPrior(int specID, Variable* target, SpeciesDataManager* sdm, unordered_map<int, unordered_map<int, double>> &edgePresenceProb);
-		int collectMoves(int);
-		int collectMoves_INDEP(int);
-		double makeMoves(int& successMove);
-		void attemptMove(MetaMove*);
+		vector<MetaMove> collectMoves(int currK);
+		vector<MetaMove> collectMoves_INDEP(int currK);
+		double makeMoves(vector<MetaMove>& moves);
 		void getNewPLLScore(int, Variable* u, Variable* v, double&, double&);
 		double getPLLScore(int, SlimFactor* sFactor, int&);
 		double getEdgePrior(int tfID, int targetID, SpeciesDataManager*);
@@ -66,7 +65,6 @@ class MetaLearner
 		double convThreshold;
 		unordered_map<string,vector<int>*> affectedVarPairs;
 		unordered_map<int, unordered_map<int, double>> edgePriors;
-		vector<MetaMove*> moveSet;
 		SpeciesDistance* speciesData;
 		vector<int> targetList;
 		vector<int> regulatorList;
