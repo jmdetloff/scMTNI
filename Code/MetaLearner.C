@@ -245,7 +245,7 @@ void MetaLearner::start()
     while (notConverged && iter < 100) {
 
         // collect the candidate edges
-        vector<MetaMove> moves = INDEP ? collectMoves_INDEP(maxFactorSizeApprox) : collectMoves(maxFactorSizeApprox);
+        vector<MetaMove> moves = INDEP ? collectMoves_INDEP() : collectMoves();
 
         double diff = makeMoves(moves);
         double priorChange = INDEP ? 0 : getPriorDelta();
@@ -364,319 +364,283 @@ double MetaLearner::precomputePerSpeciesPrior(int specID, Variable *target, Spec
     return neighborhoodPrior;
 }
 
-vector<MetaMove> MetaLearner::collectMoves(int currK)
+vector<MetaMove> MetaLearner::collectMoves()
 {
     vector<MetaMove> moveSet;
-
-    int numSpecies = speciesNameIDMap.size();
-    vector<vector<int>>& conditionSets = speciesData->getConditionSets();
-
     for (int i = 0; i < targetList.size(); i++) {
         int targetID = targetList[i];
+        collectMovesForTarget(targetID, moveSet);
+    }
+    return moveSet;
+}
 
-        unordered_map<int, double> oldPriors = edgePriors[targetID];
+void MetaLearner::collectMovesForTarget(int targetID, vector<MetaMove>& moveSet)
+{
+    unordered_map<int, double> oldPriors = edgePriors[targetID];
 
-        // score the score of best regulator:
-        vector<double> bestscore_PerSpecies(numSpecies, 0);
-        vector<double> bestscoreImprovement_PerSpecies(numSpecies, 0);
-        vector<int> besttarget_PerSpecies(numSpecies, -1);
-        vector<int> besttf_PerSpecies(numSpecies, -1);
-        int bestcsetid = -1;
-        int bestRegulatorID = -1;
-        double bestScoreImprovement_TF = 0;
+    int numSpecies = speciesNameIDMap.size();
 
-        // The logic of this is we will basically search for the utility of each regulator across every species. The datalikelihood
-        // term is computed separately from the prior. Then we will consider what will happen if were to make moves for all species.
+    // For each regulator, first we score the edge for each species individually, and then
+    // we select the combination of edges that creates the best total score.
 
-        for (int j = 0; j < regulatorList.size(); j++) {
-            int regulatorID = regulatorList[j];
+    vector<double> bestScores;
+    vector<double> bestScoreImprovements;
+    int bestConditionSetIndex = -1;
+    int bestRegulatorID = -1;
+    double bestTotalScoreImprovement = 0;
 
-            if (targetID == regulatorID) {
-                continue;
-            }
+    for (int j = 0; j < regulatorList.size(); j++) {
+        int regulatorID = regulatorList[j];
 
-            double oldPrior = oldPriors[regulatorID];
-
-            vector<double> score_PerSpecies(numSpecies, 0);
-            vector<double> scoreImprovement_PerSpecies(numSpecies, 0);
-            int nscoreImp = 0;
-
-            // for each species:
-            for (int specID = 0; specID < speciesNameIDMap.size(); specID++)
-            {
-                SpeciesDataManager *sdm = speciesDataSet[specID];
-                VariableManager *vMgr = sdm->getVariableManager();
-                Variable *target = vMgr->getVariable(targetID);
-                Variable *regulator = vMgr->getVariable(regulatorID);
-
-                // Ensure that the target and regulator are both present in this species' dataset.
-                if (target == nullptr || regulator == nullptr) {
-                    continue;
-                }
-
-                SlimFactor *sFactor = sdm->getFactor(targetID);
-
-                // If the edge already exists in the MB of sFactor continue
-                if (sFactor->mergedMB.find(regulatorID) != sFactor->mergedMB.end()) {
-                    continue;
-                }
-
-                // If the target already has the max num edges, continue.
-                if (sFactor->mergedMB.size() >= currK) {
-                    continue;
-                }
-
-                // Otherwise get the score delta of adding this regulator in sFactor's MB.
-                double scoreImprovement = 0;
-                double newScore = 0;
-                getNewPLLScore(specID, regulator, target, newScore, scoreImprovement);
-
-                // If adding the edge wouldn't improve score, we dont need to consider it.
-                if (scoreImprovement <= 0) {
-                    continue;
-                }
-
-                scoreImprovement_PerSpecies[specID] = scoreImprovement;
-                score_PerSpecies[specID] = newScore;
-                nscoreImp++;
-            }
-
-            if (nscoreImp == 0) {
-                continue;
-            }
-
-            // Now we wish to see how good it would be add these edges in different conditions for all cell types:
-            double bestImprovement = 0;
-            int csetid = -1;
-
-            for (int setIter = 0; setIter < conditionSets.size(); setIter++)
-            {
-                vector<int> &cset = conditionSets[setIter];
-                vector<int> speciesEdgeStat(cset.size(), 0);
-                int valid = 1;
-
-                // compute score improvement+prior for each condition:
-                double netImprovement = 0;
-                for (int i = 0; i < cset.size(); i++) {
-                    if (cset[i] == 1) {
-                        speciesEdgeStat[i] = 1;
-                        if (scoreImprovement_PerSpecies[i] <= 0) {
-                            valid = 0;
-                            break;
-                        }
-                        netImprovement += scoreImprovement_PerSpecies[i];
-                    } else {
-                        speciesEdgeStat[i] = 0;
-                    }
-                }
-
-                // Confirm configuration is valid
-                if (valid == 0) {
-                    continue;
-                }
-
-                // compute the prior
-                double ePrior = log(speciesData->getEdgeStatusProb(speciesEdgeStat));
-                netImprovement = netImprovement + ePrior - oldPrior;
-
-                if (netImprovement > bestImprovement) {
-                    bestImprovement = netImprovement;
-                    csetid = setIter;
-                }
-            }
-
-            // If we couldn't find a score improving configuration of edges, continue.
-            if (csetid == -1) {
-                continue;
-            }
-
-            if (bestImprovement > bestScoreImprovement_TF) {
-                vector<int> &cset = conditionSets[csetid];
-                bestscore_PerSpecies.clear();
-                bestscoreImprovement_PerSpecies.clear();
-                besttarget_PerSpecies.clear();
-                besttf_PerSpecies.clear();
-                for (int i = 0; i < cset.size(); i++) {
-                    if (cset[i] == 0) {
-                        continue;
-                    }
-                    bestscore_PerSpecies[i] = score_PerSpecies[i];
-                    bestscoreImprovement_PerSpecies[i] = scoreImprovement_PerSpecies[i];
-                    besttarget_PerSpecies[i] = targetID;
-                    besttf_PerSpecies[i] = regulatorID;
-                }
-                bestcsetid = csetid;
-                bestScoreImprovement_TF = bestImprovement;
-                bestRegulatorID = regulatorID;
-            }
-        }
-
-        // If we didnt find a score improving regulator for this target, continue.
-        if (bestcsetid == -1) {
+        if (targetID == regulatorID) {
             continue;
         }
 
-        vector<int> &cset = conditionSets[bestcsetid];
+        vector<double> scores(numSpecies, 0);
+        vector<double> scoreImprovements(numSpecies, 0);
+        bool improvesAtLeastOneScore = false;
 
-        for (int i = 0; i < cset.size(); i++) {
-            if (cset[i] == 0) {
-                continue;
-            }
-            MetaMove move;
-            move.setSrcVertex(besttf_PerSpecies[i]);
-            move.setTFID(bestRegulatorID);
-            move.setConditionSetInd(i);
-            move.setTargetVertex(besttarget_PerSpecies[i]);
-            move.setTargetID(targetID);
-            move.setTargetMBScore(bestscore_PerSpecies[i]);
-            move.setScoreImprovement(bestscoreImprovement_PerSpecies[i]);
-            moveSet.push_back(move);
+        scoreEdge(regulatorID, targetID, scores, scoreImprovements, improvesAtLeastOneScore);
+
+        if (!improvesAtLeastOneScore) {
+            continue;
         }
+
+        // Decide which species should add this edge to maximize score improvement.
+        double oldPrior = oldPriors[regulatorID];
+        double totalImprovement = 0;
+        int conditionSetIndex = -1;
+        findBestConditionSet(oldPrior, scoreImprovements, totalImprovement, conditionSetIndex);
+
+        // If we couldn't find a score improving configuration of edges, continue.
+        if (conditionSetIndex == -1 || totalImprovement <= bestTotalScoreImprovement) {
+            continue;
+        }
+
+        bestRegulatorID = regulatorID;
+        bestConditionSetIndex = conditionSetIndex;
+        bestScores = scores;
+        bestScoreImprovements = scoreImprovements;
+        bestTotalScoreImprovement = totalImprovement;
     }
 
-    return moveSet;
+    // If we didnt find a score improving regulator, so we wont make moves for this target.
+    if (bestConditionSetIndex == -1) {
+        return;
+    }
+
+    vector<vector<int>>& conditionSets = speciesData->getConditionSets();
+    vector<int> &cset = conditionSets[bestConditionSetIndex];
+
+    for (int i = 0; i < cset.size(); i++) {
+        if (cset[i] == 0) {
+            continue;
+        }
+        MetaMove move;
+        move.setTFID(bestRegulatorID);
+        move.setConditionSetInd(i);
+        move.setTargetID(targetID);
+        move.setTargetMBScore(bestScores[i]);
+        move.setScoreImprovement(bestScoreImprovements[i]);
+        moveSet.push_back(move);
+    }
 }
 
-vector<MetaMove> MetaLearner::collectMoves_INDEP(int currK)
+void MetaLearner::scoreEdge(int regulatorID, int targetID, vector<double>& scores, vector<double>& scoreImprovements, bool& atLeastOneImprovement)
+{
+    // Calculate the score of this hypothetical edge for each species.
+    for (int specID = 0; specID < speciesNameIDMap.size(); specID++) {
+        SpeciesDataManager *sdm = speciesDataSet[specID];
+        VariableManager *vMgr = sdm->getVariableManager();
+        Variable *target = vMgr->getVariable(targetID);
+        Variable *regulator = vMgr->getVariable(regulatorID);
+
+        // Ensure that the target and regulator are both present in this species' dataset.
+        if (target == nullptr || regulator == nullptr) {
+            continue;
+        }
+
+        SlimFactor *targetFactor = sdm->getFactor(targetID);
+
+        // If the edge already exists in the MB of sFactor continue
+        if (targetFactor->mergedMB.find(regulatorID) != targetFactor->mergedMB.end()) {
+            continue;
+        }
+
+        // If the target already has the max num edges, continue.
+        if (targetFactor->mergedMB.size() >= maxFactorSizeApprox) {
+            continue;
+        }
+
+        // Otherwise get the score of adding this regulator in sFactor's MB.
+        double newScore = 0;
+        double scoreImprovement = 0;
+        getNewPLLScore(specID, regulatorID, targetFactor, newScore, scoreImprovement);
+
+        // If adding the edge wouldn't improve score, we dont need to consider it.
+        if (scoreImprovement <= 0) {
+            continue;
+        }
+
+        scores[specID] = newScore;
+        scoreImprovements[specID] = scoreImprovement;
+        atLeastOneImprovement = true;
+    }
+}
+
+void MetaLearner::findBestConditionSet(double oldPrior, vector<double>& scoreImprovements, double& bestImprovement, int& conditionSetIndex)
+{
+    vector<vector<int>>& conditionSets = speciesData->getConditionSets();
+    for (int i = 0; i < conditionSets.size(); i++) {
+        vector<int> &conditionSet = conditionSets[i];
+
+        bool valid = true;
+        double netImprovement = 0;
+        for (int i = 0; i < conditionSet.size(); i++) {
+            if (conditionSet[i] == 1) {
+                if (scoreImprovements[i] <= 0) {
+                    valid = false;
+                    break;
+                }
+                netImprovement += scoreImprovements[i];
+            }
+        }
+
+        // Confirm configuration is valid
+        if (valid == 0) {
+            continue;
+        }
+
+        // compute the prior
+        double ePrior = log(speciesData->getEdgeStatusProb(conditionSet));
+        netImprovement += ePrior - oldPrior;
+
+        if (netImprovement <= bestImprovement) {
+            continue;
+        }
+
+        bestImprovement = netImprovement;
+        conditionSetIndex = i;
+    }
+}
+
+vector<MetaMove> MetaLearner::collectMoves_INDEP()
 {
     vector<MetaMove> moveSet;
-
-    int numSpecies = speciesNameIDMap.size();
-
-    // Now we will have a move for one orthogroup at a time
     for (int i = 0; i < targetList.size(); i++) {
         int targetID = targetList[i];
-
-        // score the score of best regulator:
-        vector<double> bestscore_PerSpecies(numSpecies, 0);
-        vector<double> bestscoreImprovement_PerSpecies(numSpecies, 0);
-        vector<int> besttarget_PerSpecies(numSpecies, -1);
-        vector<int> besttf_PerSpecies(numSpecies, -1);
-        int bestcsetid = -1;
-        vector<double> bestScoreImprovementTF(numSpecies, 0);
-
-        // The logic of this is we will basically search for the utility of each regulator across every species. The datalikelihood
-        // term is computed separately from the prior. Then we will consider what will happen if were to make moves for all species.
-
         for (int specID = 0; specID < speciesNameIDMap.size(); specID++) {
-            SpeciesDataManager *sdm = speciesDataSet[specID];
-            VariableManager *vMgr = sdm->getVariableManager();
-
-            // Ensure that the target is present in this species' dataset.
-            Variable *target = vMgr->getVariable(targetID);
-            if (target == nullptr) {
-                continue;
-            }
-
-            int bestRegulatorID = -1;
-
-            for (int j = 0; j < regulatorList.size(); j++) {
-                int regulatorID = regulatorList[j];
-
-                if (targetID == regulatorID) {
-                    continue;
-                }
-
-                // Ensure regulator exists in this species' dataset.
-                Variable *regulator = vMgr->getVariable(regulatorID);
-                if (regulator == nullptr) {
-                    continue;
-                }
-
-                SlimFactor *sFactor = sdm->getFactor(targetID);
-
-                // If the edge already exists in the MB of sFactor continue
-                if (sFactor->mergedMB.find(regulatorID) != sFactor->mergedMB.end()) {
-                    continue;
-                }
-
-                // If the target already has the max num edges, continue.
-                if (sFactor->mergedMB.size() >= currK) {
-                    continue;
-                }
-
-                double scoreImprovement = 0;
-                double newScore = 0;
-                getNewPLLScore(specID, regulator, target, newScore, scoreImprovement);
-
-                if (scoreImprovement <= 0 || scoreImprovement <= bestScoreImprovementTF[specID]) {
-                    continue;
-                }
-
-                bestscore_PerSpecies[specID] = newScore;
-                bestscoreImprovement_PerSpecies[specID] = scoreImprovement;
-                besttarget_PerSpecies[specID] = targetID;
-                besttf_PerSpecies[specID] = regulatorID;
-                bestcsetid = 1;
-                bestScoreImprovementTF[specID] = scoreImprovement;
-                bestRegulatorID = regulatorID;
-            }
-
-            if (bestcsetid != 1 || bestscoreImprovement_PerSpecies[specID] <= 0) {
-                continue;
-            }
-
             MetaMove move;
-            move.setSrcVertex(besttf_PerSpecies[specID]);
-            move.setTFID(bestRegulatorID);
-            move.setConditionSetInd(specID);
-            move.setTargetVertex(besttarget_PerSpecies[specID]);
-            move.setTargetID(targetID);
-            move.setTargetMBScore(bestscore_PerSpecies[specID]);
-            move.setScoreImprovement(bestscoreImprovement_PerSpecies[specID]);
-            moveSet.push_back(move);
+            if (findBestIndependentMove(specID, targetID, move)) {
+                moveSet.push_back(move);
+            }
         }
     }
-
     return moveSet;
 }
 
-// u is reg and v is target
+bool MetaLearner::findBestIndependentMove(int speciesID, int targetID, MetaMove& outMove)
+{
+    SpeciesDataManager *sdm = speciesDataSet[speciesID];
+    VariableManager *vMgr = sdm->getVariableManager();
+
+    // Ensure that the target is present in this species' dataset.
+    Variable *target = vMgr->getVariable(targetID);
+    if (target == nullptr) {
+        return false;
+    }
+
+    SlimFactor *targetFactor = sdm->getFactor(targetID);
+
+    double bestScore = 0;
+    double bestScoreImprovement = 0;
+    int bestRegulatorID = -1;
+
+    for (int j = 0; j < regulatorList.size(); j++) {
+        int regulatorID = regulatorList[j];
+
+        if (targetID == regulatorID) {
+            continue;
+        }
+
+        // Ensure regulator exists in this species' dataset.
+        Variable *regulator = vMgr->getVariable(regulatorID);
+        if (regulator == nullptr) {
+            continue;
+        }
+
+        // If the edge already exists in the MB of sFactor continue
+        if (targetFactor->mergedMB.find(regulatorID) != targetFactor->mergedMB.end()) {
+            continue;
+        }
+
+        // If the target already has the max num edges, continue.
+        if (targetFactor->mergedMB.size() >= maxFactorSizeApprox) {
+            continue;
+        }
+
+        double newScore = 0;
+        double scoreImprovement = 0;
+        getNewPLLScore(speciesID, regulatorID, targetFactor, newScore, scoreImprovement);
+
+        if (scoreImprovement <= bestScoreImprovement) {
+            continue;
+        }
+
+        bestScore = newScore;
+        bestScoreImprovement = scoreImprovement;
+        bestRegulatorID = regulatorID;
+    }
+
+    if (bestScoreImprovement <= 0) {
+        return false;
+    }
+
+    outMove.setConditionSetInd(speciesID);
+    outMove.setTargetID(targetID);
+    outMove.setTFID(bestRegulatorID);
+    outMove.setTargetMBScore(bestScore);
+    outMove.setScoreImprovement(bestScoreImprovement);
+
+    return true;
+}
+
 // species-specific prior: sum_reg[log(p)]+sum_nonreg[log(1-p)]
 // score=likelihood+species-specific prior:
-void MetaLearner::getNewPLLScore(int cid, Variable *u, Variable *v, double &targetmbScore, double &scoreImprovement)
+void MetaLearner::getNewPLLScore(int speciesID, int regulatorID, SlimFactor *targetFactor, double& score, double& scoreImprovement)
 {
-    SpeciesDataManager *sdm = speciesDataSet[cid];
-    SlimFactor *dFactor = sdm->getFactor(v->getID()); // target
-    unordered_map<int, double> &varNeighborhoodPrior = varNeighborhoodPrior_PerSpecies[cid];
-    unordered_map<int, unordered_map<int, double>> &edgePresenceProb = edgePresenceProb_PerSpecies[cid];
-    double currPrior = varNeighborhoodPrior[v->getID()]; // target
-    bool toDel_d = true;
-    // already checked mergedMB before computing getNewPLLScore
+    SpeciesDataManager *sdm = speciesDataSet[speciesID];
+    unordered_map<int, double> &varNeighborhoodPrior = varNeighborhoodPrior_PerSpecies[speciesID];
+    unordered_map<int, unordered_map<int, double>> &edgePresenceProb = edgePresenceProb_PerSpecies[speciesID];
+    double currPrior = varNeighborhoodPrior[targetFactor->fId];
+
+    // already checked mergedMB
+    targetFactor->mergedMB.insert(regulatorID);
+
     double plus = 0;
     double minus = 0;
-    dFactor->mergedMB.insert(u->getID());
-    int status = 0;
-    for (auto mIter = dFactor->mergedMB.begin(); mIter != dFactor->mergedMB.end(); mIter++)
-    {
-        double p = edgePresenceProb[*mIter][v->getID()];
+    for (auto mIter = targetFactor->mergedMB.begin(); mIter != targetFactor->mergedMB.end(); mIter++) {
+        double p = edgePresenceProb[*mIter][targetFactor->fId];
         if (p == 0 || p == 1) {
             continue;
         }
         minus = minus + log(1 - p);
         plus = plus + log(p);
     }
-    double pll_d = getPLLScore(cid, dFactor, status);
-    if (status == -1)
-    {
+
+    int status = 0;
+    double pll = getPLLScore(speciesID, targetFactor, status);
+
+    auto dIter = targetFactor->mergedMB.find(regulatorID);
+    targetFactor->mergedMB.erase(dIter);
+
+    if (status == -1) {
         scoreImprovement = -1;
-        if (toDel_d)
-        {
-            auto dIter = dFactor->mergedMB.find(u->getID());
-            dFactor->mergedMB.erase(dIter);
-        }
         return;
     }
-    currPrior = currPrior + plus - minus;
-    pll_d = pll_d + currPrior;
-    targetmbScore = pll_d;
-    // Don't include the prior. Just use the data likelihood improvement
-    double dImpr = targetmbScore - dFactor->mbScore;
-    scoreImprovement = (dImpr <= 0) ? -1 : dImpr;
-    if (toDel_d) {
-        auto dIter = dFactor->mergedMB.find(u->getID());
-        dFactor->mergedMB.erase(dIter);
-    }
+
+    score = pll + currPrior + plus - minus;
+    scoreImprovement = score - targetFactor->mbScore;
 }
 
 double MetaLearner::getPLLScore(int specID, SlimFactor *sFactor, int &status)
@@ -685,7 +649,6 @@ double MetaLearner::getPLLScore(int specID, SlimFactor *sFactor, int &status)
     double pll = potMgr->computeConditionalLL(sFactor, status);
     return pll;
 }
-
 
 double MetaLearner::getEdgePrior(int tfID, int targetID, SpeciesDataManager *sdm)
 {
@@ -721,9 +684,9 @@ double MetaLearner::makeMoves(vector<MetaMove>& moveSet)
         int regulatorID = move.getTFID();
         int targetID = move.getTargetID();
         SpeciesDataManager *sdm = speciesDataSet[specID];
-        SlimFactor *dFactor = sdm->getFactor(move.getTargetVertex());
-        dFactor->mergedMB.insert(move.getSrcVertex());
-        dFactor->mbScore = move.getTargetMBScore();
+        SlimFactor *targetFactor = sdm->getFactor(targetID);
+        targetFactor->mergedMB.insert(regulatorID);
+        targetFactor->mbScore = move.getTargetMBScore();
 
         char varPair[20];
         sprintf(varPair, "%d-%d", regulatorID, targetID);

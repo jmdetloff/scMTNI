@@ -9,17 +9,13 @@
 class MetaMove
 {
 	public:
-		int setScoreImprovement(double);
-		int setTargetMBScore(double);
-		int setSrcVertex(int);
-		int setTargetVertex(int);
-		int setConditionSetInd(int);
-		int setTFID(int);
-		int setTargetID(int);
+		void setScoreImprovement(double);
+		void setTargetMBScore(double);
+		void setConditionSetInd(int);
+		void setTFID(int);
+		void setTargetID(int);
 		int getTFID();
 		int getTargetID();
-		int getSrcVertex();
-		int getTargetVertex();
 		int getConditionSetInd();
 		double getTargetMBScore();
 		double getScoreImprovement();
@@ -27,8 +23,6 @@ class MetaMove
 	private:
 		double scoreDelta;
 		double targetMBScore;
-		int src;
-		int target;
 		int regi;
 		int targeti;
 		int conditionSetInd;
