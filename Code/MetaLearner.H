@@ -57,15 +57,9 @@ class MetaLearner
 		double getPLLScore(int, SlimFactor* sFactor, int&);
 		double getEdgePrior(int tfID, int targetID, SpeciesDataManager*);
 		int dumpAllGraphs(int);
-		int initCondsetMap_Tree(SpeciesDistance::Species* node);
-		vector<unordered_map<int,int> > initCondsetMap_Tree_backtrack(SpeciesDistance::Species* node, vector<unordered_map<int,int> > mycondition, int parentstatus, int ntransition);
-		int getLeaves(SpeciesDistance::Species* node, map<string,int>& leaves);
-		void readEvidenceTable(string fileName);
 
-		vector<string> speciesIDNameMap;
 		unordered_map<string,int> speciesNameIDMap;
 		vector<SpeciesDataManager*> speciesDataSet;
-		unordered_set<int> intermediatecells;
 		int maxFactorSize;
 		int maxFactorSizeApprox;
 		string inputFName;
@@ -73,7 +67,6 @@ class MetaLearner
 		unordered_map<string,vector<int>*> affectedVarPairs;
 		unordered_map<int, unordered_map<int, double>> edgePriors;
 		vector<MetaMove*> moveSet;
-		vector<vector<int>> condsetMap_Tree;
 		SpeciesDistance* speciesData;
 		vector<int> targetList;
 		vector<int> regulatorList;

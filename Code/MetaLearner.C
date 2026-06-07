@@ -130,7 +130,7 @@ int MetaLearner::addVariable(string varName)
 int MetaLearner::setSpeciesDistances(SpeciesDistance *aPtr)
 {
     speciesData = aPtr;
-    speciesData->setspeciesNameIDMap(speciesNameIDMap);
+    speciesData->setSpeciesNameIDMap(speciesNameIDMap);
     return 0;
 }
 
@@ -202,7 +202,6 @@ void MetaLearner::initSpeciesData(string speciesName, string tableFileName, stri
     speciesDataSet.push_back(spMgr);
 
     int datasetID = speciesDataSet.size() - 1;
-    speciesIDNameMap.push_back(speciesName);
     speciesNameIDMap[speciesName] = datasetID;
 
     cout << datasetID << "=" << speciesName << " motifNetwork=" << motifNetwork << endl;
@@ -236,7 +235,7 @@ void MetaLearner::start()
 
     if (!INDEP) {
         precomputeEmptyGraphPrior();
-        initCondsetMap_Tree(speciesData->getRoot());
+        speciesData->createConditionSets();
     }
 
     int iter = 0;
@@ -331,7 +330,7 @@ double MetaLearner::getPriorDelta()
 
 void MetaLearner::precomputeEmptyGraphPrior()
 {
-    vector<int> edgeStatus(speciesIDNameMap.size(), 0);
+    vector<int> edgeStatus(speciesNameIDMap.size(), 0);
     double prior = speciesData->getEdgeStatusProb(edgeStatus);
     double logPrior = log(prior);
     for (int i = 0; i < targetList.size(); i++) {
@@ -370,204 +369,6 @@ double MetaLearner::precomputePerSpeciesPrior(int specID, Variable *target, Spec
     return neighborhoodPrior;
 }
 
-int MetaLearner::initCondsetMap_Tree(SpeciesDistance::Species *node)
-{
-    // cout <<"rootnode=" << node->name << endl;
-    //  this is root, it has 0/1 two options:
-    int npos = pow(2, speciesIDNameMap.size());
-    vector<unordered_map<int, int>> mycondition, mycondition1;
-    int id = speciesNameIDMap[node->name];
-    unordered_map<int, int> map0, map1;
-    map0[id] = 0;
-    mycondition.push_back(map0);
-    map1[id] = 1;
-    mycondition1.push_back(map1);
-    map0.clear();
-    map1.clear();
-    if (!node->children.empty())
-    {
-        for (int i = 0; i < node->children.size(); i++)
-        {
-            mycondition = initCondsetMap_Tree_backtrack(node->children[i], mycondition, 0, 0);
-            mycondition1 = initCondsetMap_Tree_backtrack(node->children[i], mycondition1, 1, 0);
-        }
-    }
-    mycondition.insert(mycondition.end(), mycondition1.begin(), mycondition1.end());
-
-    // copy mycondition to condsetMap_Tree
-    // remove all 0s combination from mycondition:
-    for (int i = 0; i < mycondition.size(); i++)
-    {
-        // cout<<"condition " << i << ": ";
-        vector<int> cset(speciesIDNameMap.size(), 0);
-        int zerocount = 0;
-        for (auto sIter = mycondition[i].begin(); sIter != mycondition[i].end(); sIter++)
-        {
-            cset[sIter->first] = sIter->second; // cell id: sIter->first, edge status: sIter->second
-            // cout << speciesIDNameMap[sIter->first] << "=" <<sIter->second <<" ";
-            zerocount += 1 - sIter->second; // count number of 0s in the condition
-        }
-        if (zerocount < speciesIDNameMap.size())
-        {
-            condsetMap_Tree.push_back(cset);
-        }
-        mycondition[i].clear();
-        cset.clear();
-        // cout << endl;
-    }
-    // add cell-specific condition for intermediate cells (already included)
-    for (auto it = intermediatecells.begin(); it != intermediatecells.end(); it++)
-    {
-        string species = speciesIDNameMap[*it];
-        // cout << "add cell-specific condition for intermediate cell: " <<species << endl;
-        //  only in this cell:
-        vector<int> cset1; // cset0;
-        for (int j = 0; j < speciesIDNameMap.size(); j++)
-        {
-            string specname = speciesIDNameMap[j];
-            if (j == *it)
-            {
-                // cset0.push_back(0);
-                cset1.push_back(1);
-            }
-            else
-            {
-                // cset0.push_back(1);
-                cset1.push_back(0);
-            }
-        }
-        // condsetMap_Tree.push_back(cset0);
-        condsetMap_Tree.push_back(cset1);
-        // cset0.clear();
-        cset1.clear();
-    }
-
-    mycondition.clear();
-    for (int i = 0; i < mycondition1.size(); i++)
-    {
-        mycondition1[i].clear();
-    }
-    mycondition1.clear();
-    return 0;
-}
-
-// shilu: use backtracking to set up constrained conditions:
-vector<unordered_map<int, int>>
-MetaLearner::initCondsetMap_Tree_backtrack(SpeciesDistance::Species *node, vector<unordered_map<int, int>> mycondition, int parentstatus, int ntransition)
-{
-
-    int id = speciesNameIDMap[node->name];
-    // cout <<"node=" << node->name << " id=" << id <<" parentstatus=" <<parentstatus<<" ntransition=" << ntransition << endl;
-    //  intermediate cell:
-    if ((!node->children.empty()) && node->parent != NULL)
-    {
-        // cout << "intermediate cell: " <<node->name << endl;
-        intermediatecells.insert(id);
-        if (ntransition == 0)
-        {
-            // not reach max transition yet in this branch, it has 0/1 two options:
-            vector<unordered_map<int, int>> outcondition, cond1;
-            for (int r = 0; r < mycondition.size(); r++)
-            {
-                unordered_map<int, int> temp1(mycondition[r]);
-                temp1[id] = parentstatus;
-                outcondition.push_back(temp1);
-                unordered_map<int, int> temp2(mycondition[r]);
-                temp2[id] = 1 - parentstatus;
-                cond1.push_back(temp2);
-                temp1.clear();
-                temp2.clear();
-            }
-            if (!node->children.empty())
-            {
-                for (int i = 0; i < node->children.size(); i++)
-                {
-                    outcondition = initCondsetMap_Tree_backtrack(node->children[i], outcondition, parentstatus, ntransition);
-                    cond1 = initCondsetMap_Tree_backtrack(node->children[i], cond1, 1 - parentstatus, ntransition + 1);
-                }
-            }
-            outcondition.insert(outcondition.end(), cond1.begin(), cond1.end());
-
-            for (int r = 0; r < mycondition.size(); r++)
-            {
-                mycondition[r].clear();
-                cond1[r].clear();
-            }
-            cond1.clear();
-            mycondition.clear();
-            return outcondition;
-        }
-        else if (ntransition == 1)
-        {
-            // transition has occurred, it needs to be the same as parent:
-            for (int r = 0; r < mycondition.size(); r++)
-            {
-                mycondition[r][id] = parentstatus;
-            }
-            if (!node->children.empty())
-            {
-                for (int i = 0; i < node->children.size(); i++)
-                {
-                    mycondition = initCondsetMap_Tree_backtrack(node->children[i], mycondition, parentstatus, ntransition);
-                }
-            }
-            return mycondition;
-        }
-    }
-
-    // reach leaves
-    if (node->children.empty())
-    {
-        if (ntransition == 0)
-        {
-            // not reach max transition yet in this branch, it has 0/1 two options:
-            vector<unordered_map<int, int>> outcondition;
-            for (int r = 0; r < mycondition.size(); r++)
-            {
-                unordered_map<int, int> temp1(mycondition[r]);
-                temp1[id] = parentstatus;
-                outcondition.push_back(temp1);
-                unordered_map<int, int> temp2(mycondition[r]);
-                temp2[id] = 1 - parentstatus;
-                outcondition.push_back(temp2);
-                temp1.clear();
-                temp2.clear();
-                mycondition[r].clear();
-            }
-            mycondition.clear();
-            return outcondition;
-        }
-        else if (ntransition == 1)
-        {
-            // transit twice, it needs to be the same as parent:
-            for (int r = 0; r < mycondition.size(); r++)
-            {
-                mycondition[r][id] = parentstatus;
-            }
-            return mycondition;
-        }
-    }
-}
-
-// update by Shilu get all its children, not just leaves!
-int MetaLearner::getLeaves(SpeciesDistance::Species *node, map<string, int> &leaves)
-{
-    if (node->children.empty())
-    {
-        leaves[node->name] = 0;
-        return 0;
-    }
-    if (!node->children.empty())
-    {
-        for (int i = 0; i < node->children.size(); i++)
-        {
-            leaves[node->children[i]->name] = 0;
-            getLeaves(node->children[i], leaves);
-        }
-    }
-    return 0;
-}
-
 int MetaLearner::collectMoves(int currK)
 {
     for (int i = 0; i < moveSet.size(); i++)
@@ -576,7 +377,8 @@ int MetaLearner::collectMoves(int currK)
     }
     moveSet.clear();
 
-    int numSpecies = speciesIDNameMap.size();
+    int numSpecies = speciesNameIDMap.size();
+    vector<vector<int>>& conditionSets = speciesData->getConditionSets();
 
     for (int i = 0; i < targetList.size(); i++) {
         int targetID = targetList[i];
@@ -609,9 +411,8 @@ int MetaLearner::collectMoves(int currK)
             int nscoreImp = 0;
 
             // for each species:
-            for (int specID = 0; specID < speciesIDNameMap.size(); specID++)
+            for (int specID = 0; specID < speciesNameIDMap.size(); specID++)
             {
-                string spec = speciesIDNameMap[specID];
                 SpeciesDataManager *sdm = speciesDataSet[specID];
                 VariableManager *vMgr = sdm->getVariableManager();
                 Variable *target = vMgr->getVariable(targetID);
@@ -657,9 +458,9 @@ int MetaLearner::collectMoves(int currK)
             double bestImprovement = 0;
             int csetid = -1;
 
-            for (int setIter = 0; setIter < condsetMap_Tree.size(); setIter++)
+            for (int setIter = 0; setIter < conditionSets.size(); setIter++)
             {
-                vector<int> &cset = condsetMap_Tree[setIter];
+                vector<int> &cset = conditionSets[setIter];
                 vector<int> speciesEdgeStat(cset.size(), 0);
                 int valid = 1;
 
@@ -699,7 +500,7 @@ int MetaLearner::collectMoves(int currK)
             }
 
             if (bestImprovement > bestScoreImprovement_TF) {
-                vector<int> &cset = condsetMap_Tree[csetid];
+                vector<int> &cset = conditionSets[csetid];
                 bestscore_PerSpecies.clear();
                 bestscoreImprovement_PerSpecies.clear();
                 besttarget_PerSpecies.clear();
@@ -724,7 +525,7 @@ int MetaLearner::collectMoves(int currK)
             continue;
         }
 
-        vector<int> &cset = condsetMap_Tree[bestcsetid];
+        vector<int> &cset = conditionSets[bestcsetid];
 
         for (int i = 0; i < cset.size(); i++) {
             if (cset[i] == 0) {
@@ -754,7 +555,7 @@ int MetaLearner::collectMoves_INDEP(int currK)
     }
     moveSet.clear();
 
-    int numSpecies = speciesIDNameMap.size();
+    int numSpecies = speciesNameIDMap.size();
 
     // Now we will have a move for one orthogroup at a time
     for (int i = 0; i < targetList.size(); i++) {
@@ -771,8 +572,7 @@ int MetaLearner::collectMoves_INDEP(int currK)
         // The logic of this is we will basically search for the utility of each regulator across every species. The datalikelihood
         // term is computed separately from the prior. Then we will consider what will happen if were to make moves for all species.
 
-        for (int specID = 0; specID < speciesIDNameMap.size(); specID++) {
-            string spec = speciesIDNameMap[specID];
+        for (int specID = 0; specID < speciesNameIDMap.size(); specID++) {
             SpeciesDataManager *sdm = speciesDataSet[specID];
             VariableManager *vMgr = sdm->getVariableManager();
 
@@ -953,7 +753,7 @@ void MetaLearner::attemptMove(MetaMove *move)
 
     vector<int> *newEdgeStatus;
     if (affectedVarPairs.find(varPairKey) == affectedVarPairs.end()) {
-        newEdgeStatus = new vector<int>(speciesIDNameMap.size(), 0);
+        newEdgeStatus = new vector<int>(speciesNameIDMap.size(), 0);
         affectedVarPairs[varPairKey] = newEdgeStatus;
     } else {
         newEdgeStatus = affectedVarPairs[varPairKey];

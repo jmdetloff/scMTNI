@@ -36,22 +36,30 @@ class SpeciesDistance
 		void readSpeciesTree(const char*);
 
 		// Associates each species in the tree with an id.
-		void setspeciesNameIDMap(unordered_map<string,int>& spNameIDMap);
+		void setSpeciesNameIDMap(unordered_map<string,int>& spNameIDMap);
 
 		/*
 		Returns the probability of an edge having a particular configuration of
 		presence/absence in the networks of the species of this tree. edgeStatus should
 		be ordered such that the status at each index maps to the species whose id, as
-		set by setspeciesNameIDMap, is that index.
+		set by setSpeciesNameIDMap, is that index.
 		*/
 		double getEdgeStatusProb(vector<int>& edgeStatus);
 
+		void createConditionSets();
+
+		vector<vector<int>>& getConditionSets();
+
 	private:
-		unordered_map<string,Species*> speciesSet;
-		unordered_map<string,int> speciesNameIDMap;
-		unordered_map<int,double> binEdgeKeyProbMap;
+		void extendConditionSets(Species *node, vector<unordered_map<int, int>>& cSets, int parentStatus);
+		void extendConditionSetsWithoutTransitions(Species *node, vector<unordered_map<int, int>>& cSets, int parentStatus);
+		double getSubTreeProb(bool, Species*, vector<int>&);
+
+		unordered_map<string, Species*> speciesSet;
+		unordered_map<string, int> speciesNameIDMap;
+		unordered_map<int, double> binEdgeKeyProbMap;
 		Species* root;
 		double proot;
-		double getSubTreeProb(bool, Species*, vector<int>&);
+		vector<vector<int>> conditionSets;
 };
 #endif
