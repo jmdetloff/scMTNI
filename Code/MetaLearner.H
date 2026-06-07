@@ -25,7 +25,6 @@ class MetaLearner
 		int init();
 		int setInputFName(const char*);
 		int setMaxFactorSize(int);
-		int setMaxFactorSize_Approx(int);
 		int setConvergenceThreshold(double);
 
 		// This list limits the regulators that will be considered for all species.
@@ -67,7 +66,6 @@ class MetaLearner
 		unordered_map<string,int> speciesNameIDMap;
 		vector<SpeciesDataManager*> speciesDataSet;
 		int maxFactorSize;
-		int maxFactorSizeApprox;
 		string inputFName;
 		double convThreshold;
 		unordered_map<string,vector<int>*> affectedVarPairs;
