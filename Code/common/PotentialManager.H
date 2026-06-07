@@ -17,28 +17,24 @@ class VariableManager;
 
 class PotentialManager
 {
-	public:
-		PotentialManager();
-		~PotentialManager();
+    public:
+        PotentialManager();
+        ~PotentialManager();
 
-        void deleteData();
-		int setOutputDir(const char*);
-        void loadEvidenceFromTable(const vector<string>& inputTable, const vector<string>& variableList);
+        void loadEvidenceFromTable(string fileName, const vector<string>& variableList);
         VariableManager* getVariableManager();
-        double computeMeanVarPseudoLikelihood(int);
-        double computePotentialMBCovMean(SlimFactor* sFactor, int&);
+        double computeUnivariateLL(int);
+        double computeConditionalLL(SlimFactor* sFactor, int&);
         void computePotentialMBCovMean(SlimFactor* sFactor, double& mbcondvar, double& mbbias, unordered_map<int,double>& mbcondMean_Vect);
         void dumpVarMB(SlimFactor* sFactor, ofstream& oFile);
 
-	private:
-		int estimateCovariance(int, int);
-		double computeLL(int dim, double determinant);
+    private:
+        double computeJointLL(int dim, double determinant);
+        Matrix* createMBCovarianceMatrix(SlimFactor* factor, vector<int>& mbVars);
 
-		char outputDir[1024];
-        Matrix* data;
         Matrix* meanMat;
         Matrix* covMat;
-        double testdataSize;
+        int sampleCount;
         VariableManager* vMgr;
 };
 #endif

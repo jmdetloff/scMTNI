@@ -11,7 +11,6 @@
  *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
  *   IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *   */
-#include <cassert>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -187,23 +186,14 @@ int MetaLearner::init()
         initSpeciesData(strs[0], strs[1], strs[2], strs[3]);
     }
     inFile.close();
-    inputTable.clear();
     cout << "-------------------------------------------------------------" << endl;
     return 0;
 }
 
 void MetaLearner::initSpeciesData(string speciesName, string tableFileName, string outputLoc, string motifNetwork)
 {
-    if (tableFileName.find('.') == std::string::npos) {
-        tableFileName = tableFileName + ".table";
-        std::cout << "no .table in input expression filename, add .table suffix:" << tableFileName << endl;
-    }
-
-    readEvidenceTable(tableFileName);
-
     PotentialManager *potMgr = new PotentialManager;
-    potMgr->setOutputDir(outputLoc.c_str());
-    potMgr->loadEvidenceFromTable(inputTable, variableList);
+    potMgr->loadEvidenceFromTable(tableFileName, variableList);
 
     SpeciesDataManager *spMgr = new SpeciesDataManager;
     spMgr->setPotentialManager(potMgr);
@@ -217,10 +207,6 @@ void MetaLearner::initSpeciesData(string speciesName, string tableFileName, stri
 
     cout << datasetID << "=" << speciesName << " motifNetwork=" << motifNetwork << endl;
 
-    char foldOutputDirCmd[1024];
-    sprintf(foldOutputDirCmd, "mkdir -p %s/fold0", outputLoc.c_str());
-    system(foldOutputDirCmd);
-
     unordered_map<int, double> varNeighborhoodPrior;
     unordered_map<int, unordered_map<int, double>> edgePresenceProb;
 
@@ -229,7 +215,7 @@ void MetaLearner::initSpeciesData(string speciesName, string tableFileName, stri
     for (int i = 0; i < variableSet.size(); i++) {
         Variable *target = variableSet[i];
         SlimFactor *sFactor = spMgr->getFactor(target->getID());
-        double pll = potMgr->computeMeanVarPseudoLikelihood(sFactor->fId);
+        double pll = potMgr->computeUnivariateLL(sFactor->fId);
         double priorScore = precomputePerSpeciesPrior(datasetID, target, spMgr, edgePresenceProb);
         varNeighborhoodPrior[sFactor->fId] = priorScore;
         sFactor->mbScore = pll + priorScore;
@@ -238,40 +224,6 @@ void MetaLearner::initSpeciesData(string speciesName, string tableFileName, stri
 
     varNeighborhoodPrior_PerSpecies.push_back(varNeighborhoodPrior);
     edgePresenceProb_PerSpecies.push_back(edgePresenceProb);
-
-    potMgr->deleteData();
-}
-
-void MetaLearner::readEvidenceTable(string fileName)
-{
-    /*
-     Reads gene names and expression levels from a tab-separated file, where the first row is assumed (for now)
-     to be headers. In subsequent rows, the first column is a gene name and remaining columns are expression levels.
-     This method just loads the meaningful lines into a vector that is then passed to VariableManager::readVariablesFromTable().
-     It's done this way so as not to break encapsulation of private members of VariableManager.
-     */
-    cout << "readEvidenceTable:" << fileName << endl;
-    ifstream inFile(fileName);
-    assert(inFile);
-
-    bool headerLine = true;
-    string inputLine;
-    inputTable.clear();
-
-    // Read all the lines with meaningful data
-    while (getline(inFile, inputLine))
-    {
-        if (inputLine.empty() || inputLine.find('#') == 0)
-        {
-            continue;
-        }
-        if (headerLine)
-        {
-            headerLine = false;
-            continue;
-        }
-        inputTable.push_back(inputLine);
-    }
 }
 
 void MetaLearner::start()
@@ -943,7 +895,7 @@ void MetaLearner::getNewPLLScore(int cid, Variable *u, Variable *v, double &targ
 double MetaLearner::getPLLScore(int specID, SlimFactor *sFactor, int &status)
 {
     PotentialManager *potMgr = speciesDataSet[specID]->getPotentialManager();
-    double pll = potMgr->computePotentialMBCovMean(sFactor, status);
+    double pll = potMgr->computeConditionalLL(sFactor, status);
     return pll;
 }
 

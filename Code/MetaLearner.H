@@ -82,7 +82,6 @@ class MetaLearner
 		vector<unordered_map<int, unordered_map<int, double>>> edgePresenceProb_PerSpecies;
 		double beta1;
 		double beta2;
-		vector<string> inputTable;
 		bool INDEP;
 		double initGlobalScore;
 		double edgePresenceProb;
