@@ -63,12 +63,6 @@ int MetaLearner::setMaxFactorSize(int aVal)
     return 0;
 }
 
-int MetaLearner::setMaxFactorSize_Approx(int aVal)
-{
-    maxFactorSizeApprox = aVal;
-    return 0;
-}
-
 int MetaLearner::setINDEP()
 {
     INDEP = true;
@@ -264,7 +258,7 @@ void MetaLearner::start()
         iter++;
     }
 
-    dumpAllGraphs(maxFactorSizeApprox);
+    dumpAllGraphs(maxFactorSize);
     cout << "Final Score " << currGlobalScore << endl;
     showModelParameters();
 
@@ -468,7 +462,7 @@ void MetaLearner::scoreEdge(int regulatorID, int targetID, vector<double>& score
         }
 
         // If the target already has the max num edges, continue.
-        if (targetFactor->mergedMB.size() >= maxFactorSizeApprox) {
+        if (targetFactor->mergedMB.size() >= maxFactorSize) {
             continue;
         }
 
@@ -575,7 +569,7 @@ bool MetaLearner::findBestIndependentMove(int speciesID, int targetID, MetaMove&
         }
 
         // If the target already has the max num edges, continue.
-        if (targetFactor->mergedMB.size() >= maxFactorSizeApprox) {
+        if (targetFactor->mergedMB.size() >= maxFactorSize) {
             continue;
         }
 

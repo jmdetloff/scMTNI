@@ -44,7 +44,7 @@ Framework::init(int argc, char** argv)
     int optret='-';
     opterr=1;
     int oldoptind=optind;
-    while(optret=getopt(argc,argv,"f:k:x:p:t:l:i:d:n:b:q:")!=-1)
+    while(optret=getopt(argc,argv,"f:x:p:t:l:i:d:n:b:q:")!=-1)
     {
         if(optret=='?')
         {
@@ -69,16 +69,10 @@ Framework::init(int argc, char** argv)
                 metaLearner.setInputFName(my_optarg);
                 break;
             }
-            case 'k':
-            {
-                int aSize=atoi(my_optarg);
-                metaLearner.setMaxFactorSize(aSize);
-                break;
-            }
             case 'x':
             {
                 int aSize=atoi(my_optarg);
-                metaLearner.setMaxFactorSize_Approx(aSize);
+                metaLearner.setMaxFactorSize(aSize);
                 break;
             }
             case 'p':
@@ -152,34 +146,27 @@ Framework::start()
 int
 main(int argc, char* argv[])
 {
-    if(argc<2)
-    {
+    if(argc < 2) {
         cout <<"factorGraphInf " <<  endl
-        <<"-f modelname " << endl
-        << "-k maxfactorsize " << endl
-        << "-x maxfactorsize_approx" << endl
+        << "-f modelname " << endl
+        << "-x maxfactorsize" << endl
         << "-p proot" << endl
         << "-t convergence_threshold" << endl
-        << "-v cross_validation_cnt" << endl
         << "-l restrictedfname" << endl
-        << "-g knowngraph" << endl
-        << "-r randomseed" << endl
-        << "-d distancematrix" << endl
-        << "-m synergy_proper_orthogrps" << endl
-        << "-s tree" << endl
+        << "-i indep" << endl
+        << "-d tree" << endl
         << "-n input_og_list" << endl
         << "-b beta1" << endl
         << "-q beta2" << endl;
-        
         return 0;
     }
+
     Framework fw;
-    if(fw.init(argc,argv)!=Error::SUCCESS)
-    {
+    if(fw.init(argc,argv)!=Error::SUCCESS) {
         return 0;
     }
+
     fw.start();
     return 0;
-    
 }
 
