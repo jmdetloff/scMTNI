@@ -245,14 +245,9 @@ void MetaLearner::start()
     while (notConverged && iter < 100) {
 
         // collect the candidate edges
-        if (INDEP) {
-            collectMoves_INDEP(maxFactorSizeApprox);
-        } else {
-            collectMoves(maxFactorSizeApprox);
-        }
+        vector<MetaMove> moves = INDEP ? collectMoves_INDEP(maxFactorSizeApprox) : collectMoves(maxFactorSizeApprox);
 
-        int successMove = 0;
-        double diff = makeMoves(successMove);
+        double diff = makeMoves(moves);
         double priorChange = INDEP ? 0 : getPriorDelta();
         double newScore = currGlobalScore + diff;
 
@@ -264,7 +259,7 @@ void MetaLearner::start()
 
         double vm, rss;
         process_mem_usage(vm, rss);
-        cout << "ITERATION " << iter << " newScore=" << newScore << " diffscore=" << diff << " priorChange=" << priorChange << " successMove=" << successMove << endl;
+        cout << "ITERATION " << iter << " newScore=" << newScore << " diffscore=" << diff << " priorChange=" << priorChange << " successfulMoves=" << moves.size() << endl;
 
         iter++;
     }
@@ -369,13 +364,9 @@ double MetaLearner::precomputePerSpeciesPrior(int specID, Variable *target, Spec
     return neighborhoodPrior;
 }
 
-int MetaLearner::collectMoves(int currK)
+vector<MetaMove> MetaLearner::collectMoves(int currK)
 {
-    for (int i = 0; i < moveSet.size(); i++)
-    {
-        delete moveSet[i];
-    }
-    moveSet.clear();
+    vector<MetaMove> moveSet;
 
     int numSpecies = speciesNameIDMap.size();
     vector<vector<int>>& conditionSets = speciesData->getConditionSets();
@@ -531,29 +522,24 @@ int MetaLearner::collectMoves(int currK)
             if (cset[i] == 0) {
                 continue;
             }
-            MetaMove *move = new MetaMove;
-            move->setSrcVertex(besttf_PerSpecies[i]);
-            move->setTFID(bestRegulatorID);
-            move->setConditionSetInd(i);
-            move->setTargetVertex(besttarget_PerSpecies[i]);
-            move->setTargetID(targetID);
-            move->setTargetMBScore(bestscore_PerSpecies[i]);
-            move->setScoreImprovement(bestscoreImprovement_PerSpecies[i]);
+            MetaMove move;
+            move.setSrcVertex(besttf_PerSpecies[i]);
+            move.setTFID(bestRegulatorID);
+            move.setConditionSetInd(i);
+            move.setTargetVertex(besttarget_PerSpecies[i]);
+            move.setTargetID(targetID);
+            move.setTargetMBScore(bestscore_PerSpecies[i]);
+            move.setScoreImprovement(bestscoreImprovement_PerSpecies[i]);
             moveSet.push_back(move);
         }
     }
-    return 0;
+
+    return moveSet;
 }
 
-int MetaLearner::collectMoves_INDEP(int currK)
+vector<MetaMove> MetaLearner::collectMoves_INDEP(int currK)
 {
-    cout << "MetaLearner::collectMoves_INDEP" << endl;
-
-    for (int i = 0; i < moveSet.size(); i++)
-    {
-        delete moveSet[i];
-    }
-    moveSet.clear();
+    vector<MetaMove> moveSet;
 
     int numSpecies = speciesNameIDMap.size();
 
@@ -630,18 +616,19 @@ int MetaLearner::collectMoves_INDEP(int currK)
                 continue;
             }
 
-            MetaMove *move = new MetaMove;
-            move->setSrcVertex(besttf_PerSpecies[specID]);
-            move->setTFID(bestRegulatorID);
-            move->setConditionSetInd(specID);
-            move->setTargetVertex(besttarget_PerSpecies[specID]);
-            move->setTargetID(targetID);
-            move->setTargetMBScore(bestscore_PerSpecies[specID]);
-            move->setScoreImprovement(bestscoreImprovement_PerSpecies[specID]);
+            MetaMove move;
+            move.setSrcVertex(besttf_PerSpecies[specID]);
+            move.setTFID(bestRegulatorID);
+            move.setConditionSetInd(specID);
+            move.setTargetVertex(besttarget_PerSpecies[specID]);
+            move.setTargetID(targetID);
+            move.setTargetMBScore(bestscore_PerSpecies[specID]);
+            move.setScoreImprovement(bestscoreImprovement_PerSpecies[specID]);
             moveSet.push_back(move);
         }
     }
-    return 0;
+
+    return moveSet;
 }
 
 // u is reg and v is target
@@ -724,41 +711,36 @@ double MetaLearner::getEdgePrior(int tfID, int targetID, SpeciesDataManager *sdm
     return prior;
 }
 
-double MetaLearner::makeMoves(int &successMove)
+double MetaLearner::makeMoves(vector<MetaMove>& moveSet)
 {
     double netScoreDelta = 0;
-    for (int m = 0; m < moveSet.size(); m++)
-    {
-        MetaMove *move = moveSet[m];
-        attemptMove(move);
-        successMove++;
-        netScoreDelta = netScoreDelta + move->getScoreImprovement();
+    for (int m = 0; m < moveSet.size(); m++) {
+        MetaMove& move = moveSet[m];
+
+        int specID = move.getConditionSetInd();
+        int regulatorID = move.getTFID();
+        int targetID = move.getTargetID();
+        SpeciesDataManager *sdm = speciesDataSet[specID];
+        SlimFactor *dFactor = sdm->getFactor(move.getTargetVertex());
+        dFactor->mergedMB.insert(move.getSrcVertex());
+        dFactor->mbScore = move.getTargetMBScore();
+
+        char varPair[20];
+        sprintf(varPair, "%d-%d", regulatorID, targetID);
+        string varPairKey(varPair);
+
+        vector<int> *newEdgeStatus;
+        if (affectedVarPairs.find(varPairKey) == affectedVarPairs.end()) {
+            newEdgeStatus = new vector<int>(speciesNameIDMap.size(), 0);
+            affectedVarPairs[varPairKey] = newEdgeStatus;
+        } else {
+            newEdgeStatus = affectedVarPairs[varPairKey];
+        }
+        (*newEdgeStatus)[specID] = 1;
+
+        netScoreDelta += move.getScoreImprovement();
     }
     return netScoreDelta;
-}
-
-void MetaLearner::attemptMove(MetaMove *move)
-{
-    int specID = move->getConditionSetInd();
-    int regulatorID = move->getTFID();
-    int targetID = move->getTargetID();
-    SpeciesDataManager *sdm = speciesDataSet[specID];
-    SlimFactor *dFactor = sdm->getFactor(move->getTargetVertex());
-    dFactor->mergedMB.insert(move->getSrcVertex());
-    dFactor->mbScore = move->getTargetMBScore();
-
-    char varPair[20];
-    sprintf(varPair, "%d-%d", regulatorID, targetID);
-    string varPairKey(varPair);
-
-    vector<int> *newEdgeStatus;
-    if (affectedVarPairs.find(varPairKey) == affectedVarPairs.end()) {
-        newEdgeStatus = new vector<int>(speciesNameIDMap.size(), 0);
-        affectedVarPairs[varPairKey] = newEdgeStatus;
-    } else {
-        newEdgeStatus = affectedVarPairs[varPairKey];
-    }
-    (*newEdgeStatus)[specID] = 1;
 }
 
 int MetaLearner::dumpAllGraphs(int currK)
