@@ -49,10 +49,17 @@ class MetaLearner
 		double getPriorDelta();
 		void precomputeEmptyGraphPrior();
 		double precomputePerSpeciesPrior(int specID, Variable* target, SpeciesDataManager* sdm, unordered_map<int, unordered_map<int, double>> &edgePresenceProb);
-		vector<MetaMove> collectMoves(int currK);
-		vector<MetaMove> collectMoves_INDEP(int currK);
+
+		vector<MetaMove> collectMoves();
+		void collectMovesForTarget(int targetID, vector<MetaMove>& moveSet);
+		void scoreEdge(int regulatorID, int targetID, vector<double>& scores, vector<double>& scoreImprovements, bool& atleastOneImprovement);
+		void findBestConditionSet(double oldPrior, vector<double>& scoreImprovements, double& bestImprovement, int& conditionSetIndex);
+
+		vector<MetaMove> collectMoves_INDEP();
+		bool findBestIndependentMove(int speciesID, int targetID, MetaMove& outMove);
+
 		double makeMoves(vector<MetaMove>& moves);
-		void getNewPLLScore(int, Variable* u, Variable* v, double&, double&);
+		void getNewPLLScore(int speciesID, int regulatorID, SlimFactor *targetFactor, double& score, double& scoreImprovement);
 		double getPLLScore(int, SlimFactor* sFactor, int&);
 		double getEdgePrior(int tfID, int targetID, SpeciesDataManager*);
 		int dumpAllGraphs(int);

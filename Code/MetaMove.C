@@ -14,65 +14,34 @@
 
 #include "MetaMove.H"
 
-int 
+void
 MetaMove::setScoreImprovement(double aVal)
 {
 	scoreDelta=aVal;
-	return 0;
 }
 
-int
+void
 MetaMove::setTargetMBScore(double aScore)
 {
 	targetMBScore=aScore;
-	return 0;
 }
 
-int 
-MetaMove::setSrcVertex(int vid)
-{
-	src=vid;
-	return 0;
-}
-
-int
-MetaMove::setTargetVertex(int vid)
-{	
-	target=vid;
-	return 0;
-}
-
-int
+void
 MetaMove::setTFID(int vid)
 {
     regi=vid;
-    return 0;
 }
 
-int
+void
 MetaMove::setTargetID(int vid)
 {
     targeti=vid;
-    return 0;
 }
 
-int
+void
 MetaMove::setConditionSetInd(int aind)
 {
 	conditionSetInd=aind;
-	return 0;
-}
-
-int 
-MetaMove::getSrcVertex()
-{
-	return src;
-}
-
-int
-MetaMove::getTargetVertex()
-{
-	return target;
 }
 
 int
