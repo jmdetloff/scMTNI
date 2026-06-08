@@ -44,7 +44,6 @@ class MetaLearner
 		int addVariable(string varName);
 		void showModelParameters();
 		void process_mem_usage(double& vm_usage, double& resident_set);
-		double getScore();
 		void precomputeEmptyGraphPrior();
 		double precomputePerSpeciesPrior(int specID, Variable* target, SpeciesDataManager* sdm, unordered_map<int, unordered_map<int, double>> &edgePresenceProb);
 
@@ -58,7 +57,6 @@ class MetaLearner
 
 		void makeMoves(vector<MetaMove>& moveSet, double& scoreChange, double& priorChange);
 		void getNewPLLScore(int speciesID, int regulatorID, SlimFactor *targetFactor, double& score, double& scoreImprovement);
-		double getPLLScore(int, SlimFactor* sFactor, int&);
 		double getEdgePrior(int tfID, int targetID, SpeciesDataManager*);
 		int dumpAllGraphs(int);
 
