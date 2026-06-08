@@ -274,23 +274,6 @@ void MetaLearner::start()
     sFile.close();
 }
 
-double MetaLearner::getScore()
-{
-    double gScore = 0;
-
-    for (int i = 0; i < speciesDataSet.size(); i++) {
-        SpeciesDataManager *speciesDataManager = speciesDataSet[i];
-        VariableManager *varMgr = speciesDataManager->getVariableManager();
-        vector<Variable*>& variableSet = varMgr->getVariableSet();
-        for (int j = 0; j < variableSet.size(); j++) {
-            Variable *var = variableSet[j];
-            SlimFactor *sFactor = speciesDataManager->getFactor(var->getID());
-            gScore = gScore + sFactor->mbScore;
-        }
-    }
-    return gScore;
-}
-
 void MetaLearner::precomputeEmptyGraphPrior()
 {
     vector<int> edgeStatus(speciesNameIDMap.size(), 0);
@@ -596,8 +579,10 @@ void MetaLearner::getNewPLLScore(int speciesID, int regulatorID, SlimFactor *tar
         plus = plus + log(p);
     }
 
+    PotentialManager *potMgr = sdm->getPotentialManager();
+
     int status = 0;
-    double pll = getPLLScore(speciesID, targetFactor, status);
+    double pll = potMgr->computeConditionalLL(targetFactor, status);
 
     auto dIter = targetFactor->mergedMB.find(regulatorID);
     targetFactor->mergedMB.erase(dIter);
@@ -609,13 +594,6 @@ void MetaLearner::getNewPLLScore(int speciesID, int regulatorID, SlimFactor *tar
 
     score = pll + currPrior + plus - minus;
     scoreImprovement = score - targetFactor->mbScore;
-}
-
-double MetaLearner::getPLLScore(int specID, SlimFactor *sFactor, int &status)
-{
-    PotentialManager *potMgr = speciesDataSet[specID]->getPotentialManager();
-    double pll = potMgr->computeConditionalLL(sFactor, status);
-    return pll;
 }
 
 double MetaLearner::getEdgePrior(int tfID, int targetID, SpeciesDataManager *sdm)
