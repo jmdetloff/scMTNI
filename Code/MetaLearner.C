@@ -241,19 +241,19 @@ void MetaLearner::start()
         // collect the candidate edges
         vector<MetaMove> moves = INDEP ? collectMoves_INDEP() : collectMoves();
 
-        double diff = makeMoves(moves);
-        double priorChange = INDEP ? 0 : getPriorDelta();
-        double newScore = currGlobalScore + diff;
+        double scoreChange = 0;
+        double priorChange = 0;
+        makeMoves(moves, scoreChange, priorChange);
 
-        if (diff <= convThreshold) {
+        if (scoreChange <= convThreshold) {
             notConverged = false;
         }
 
-        currGlobalScore = newScore;
+        currGlobalScore += scoreChange;
 
         double vm, rss;
         process_mem_usage(vm, rss);
-        cout << "ITERATION " << iter << " newScore=" << newScore << " diffscore=" << diff << " priorChange=" << priorChange << " successfulMoves=" << moves.size() << endl;
+        cout << "ITERATION " << iter << " newScore=" << currGlobalScore << " diffscore=" << scoreChange << " priorChange=" << priorChange << " successfulMoves=" << moves.size() << endl;
 
         iter++;
     }
@@ -289,32 +289,6 @@ double MetaLearner::getScore()
         }
     }
     return gScore;
-}
-
-double MetaLearner::getPriorDelta()
-{
-    double oldStructPrior = 0;
-    double newStructPrior = 0;
-    // Need to consider the old contribution of the edges, delete that from the overall prior and add the new contribution
-    for (auto edgeIter = affectedVarPairs.begin(); edgeIter != affectedVarPairs.end(); edgeIter++)
-    {
-        vector<string> keyid = Utils::split(edgeIter->first, '-');
-        int regulatorID = stoi(keyid[0]);
-        int targetID = stoi(keyid[1]);
-        double aval = speciesData->getEdgeStatusProb(*(edgeIter->second));
-        double edgePrior = log(aval);
-        double oldEdgePrior = edgePriors[targetID][regulatorID];
-        oldStructPrior += oldEdgePrior;
-        newStructPrior += edgePrior;
-        edgePriors[targetID][regulatorID] = edgePrior;
-    }
-    for (auto edgeIter = affectedVarPairs.begin(); edgeIter != affectedVarPairs.end(); edgeIter++)
-    {
-        delete edgeIter->second;
-    }
-    affectedVarPairs.clear();
-    double priorDelta = newStructPrior - oldStructPrior;
-    return priorDelta;
 }
 
 void MetaLearner::precomputeEmptyGraphPrior()
@@ -668,9 +642,10 @@ double MetaLearner::getEdgePrior(int tfID, int targetID, SpeciesDataManager *sdm
     return prior;
 }
 
-double MetaLearner::makeMoves(vector<MetaMove>& moveSet)
+void MetaLearner::makeMoves(vector<MetaMove>& moveSet, double& scoreChange, double& priorChange)
 {
-    double netScoreDelta = 0;
+    map<pair<int, int>, vector<int>> affectedVarPairs;
+
     for (int m = 0; m < moveSet.size(); m++) {
         MetaMove& move = moveSet[m];
 
@@ -682,22 +657,42 @@ double MetaLearner::makeMoves(vector<MetaMove>& moveSet)
         targetFactor->mergedMB.insert(regulatorID);
         targetFactor->mbScore = move.getTargetMBScore();
 
-        char varPair[20];
-        sprintf(varPair, "%d-%d", regulatorID, targetID);
-        string varPairKey(varPair);
+        pair<int, int> pairKey(regulatorID, targetID);
 
-        vector<int> *newEdgeStatus;
-        if (affectedVarPairs.find(varPairKey) == affectedVarPairs.end()) {
-            newEdgeStatus = new vector<int>(speciesNameIDMap.size(), 0);
-            affectedVarPairs[varPairKey] = newEdgeStatus;
-        } else {
-            newEdgeStatus = affectedVarPairs[varPairKey];
+        if (affectedVarPairs.find(pairKey) == affectedVarPairs.end()) {
+            affectedVarPairs[pairKey] = vector<int>(speciesNameIDMap.size(), 0);
         }
-        (*newEdgeStatus)[specID] = 1;
 
-        netScoreDelta += move.getScoreImprovement();
+        vector<int>& newEdgeStatus = affectedVarPairs[pairKey];
+        newEdgeStatus[specID] = 1;
+
+        scoreChange += move.getScoreImprovement();
     }
-    return netScoreDelta;
+
+    // In INDEP mode, there's no prior relating edges across species.
+    if (INDEP) {
+        return;
+    }
+
+    // Compute the change to the prior relating edges across species for each affected variable.
+
+    double oldStructPrior = 0;
+    double newStructPrior = 0;
+
+    for (auto edgeIter = affectedVarPairs.begin(); edgeIter != affectedVarPairs.end(); edgeIter++) {
+        const pair<int, int>& pairKey = edgeIter->first;
+        vector<int>& conditionSet = edgeIter->second;
+        int regulatorID = pairKey.first;
+        int targetID = pairKey.second;
+        double aval = speciesData->getEdgeStatusProb(conditionSet);
+        double edgePrior = log(aval);
+        double oldEdgePrior = edgePriors[targetID][regulatorID];
+        oldStructPrior += oldEdgePrior;
+        newStructPrior += edgePrior;
+        edgePriors[targetID][regulatorID] = edgePrior;
+    }
+
+    priorChange = newStructPrior - oldStructPrior;
 }
 
 int MetaLearner::dumpAllGraphs(int currK)
