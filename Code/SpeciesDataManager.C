@@ -13,24 +13,13 @@
  *   */
 #include <string.h>
 #include "Variable.H"
-#include "Evidence.H"
 #include "Error.H"
 #include "VariableManager.H"
 #include "Potential.H"
 #include "PotentialManager.H"
 #include "SlimFactor.H"
 #include "FactorGraph.H"
-#include "EvidenceManager.H"
 #include "SpeciesDataManager.H"
-
-
-SpeciesDataManager::SpeciesDataManager()
-{
-}
-
-SpeciesDataManager::~SpeciesDataManager()
-{
-}
 
 int
 SpeciesDataManager::setVariableManager(VariableManager* aPtr)
@@ -49,23 +38,11 @@ SpeciesDataManager::createFactorGraph()
     for(int globalFactorID=0;globalFactorID<variableSet.size();globalFactorID++)
 	{
 		SlimFactor* sFactor=new SlimFactor;
-		//sFactor->vIds=new int[1];
-		//sFactor->vIds[0]=globalFactorID;
-		//sFactor->vCnt=1;
 		sFactor->fId=globalFactorID;  //same as vIds
-		//globalFactorID++;
 		fgraph->setFactor(sFactor);
 	}
 	return 0;
 }
-
-int
-SpeciesDataManager::setEvidenceManager(EvidenceManager* aPtr)
-{
-	evMgr=aPtr;
-	return 0;
-}
-
 
 int 
 SpeciesDataManager::setPotentialManager(PotentialManager* aPtr)
@@ -93,11 +70,6 @@ SpeciesDataManager::setMotifNetwork(const char* aPtr)
 		{
 			continue;
 		}
-
-		// strip trailing whitespace from line
-		//string buffstring = buffer;
-		//buffstring.erase(buffstring.find_last_not_of(" \n\r\t") + 1);
-		//char* tok=strtok(buffstring.c_str(), "\t");
 
 		char* tok=strtok(buffer,"\t");
 		int tokCnt=0;
@@ -145,45 +117,6 @@ SpeciesDataManager::setMotifNetwork(const char* aPtr)
 	inFile.close();
 	return 0;
 }
-
-/*
-int 
-SpeciesDataManager::readRegulators(const char* aFName)
-{
-	ifstream inFile(aFName);
-	char buffer[1024];
-	while(inFile.good())
-	{
-		inFile.getline(buffer,1023);
-		if(strlen(buffer)<=0)
-		{
-			continue;
-		}
-		string regulator(buffer);
-		regulatorSet[regulator]=0;
-	}
-	inFile.close();
-	return 0;
-}
-
-int 
-SpeciesDataManager::readTargets(const char* aFName)
-{
-	ifstream inFile(aFName);
-	char buffer[1024];
-	while(inFile.good())
-	{
-		inFile.getline(buffer,1023);
-		if(strlen(buffer)<=0)
-		{
-			continue;
-		}
-		string target(buffer);
-		targetSet[target]=0;
-	}
-	inFile.close();
-	return 0;
-}*/
 	
 VariableManager*
 SpeciesDataManager::getVariableManager()
@@ -197,12 +130,6 @@ SpeciesDataManager::getFactorGraph()
 	return fgraph;
 }
 
-EvidenceManager*
-SpeciesDataManager::getEvidenceManager()
-{
-	return evMgr;
-}
-
 PotentialManager*
 SpeciesDataManager::getPotentialManager()
 {
@@ -214,19 +141,7 @@ SpeciesDataManager::getOutputLoc()
 {
 	return outputLoc;
 }
-/*
-map<string,int>& 
-SpeciesDataManager::getRegulators()
-{
-	return regulatorSet;
-}
 
-map<string,int>&
-SpeciesDataManager::getTargets()
-{
-	return targetSet;
-}
- */
 unordered_map<int,unordered_map<int,double>*>&
 SpeciesDataManager::getMotifNetwork()
 {

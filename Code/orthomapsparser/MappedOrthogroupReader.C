@@ -17,18 +17,8 @@
 #include <cstring>
 #include <stdlib.h>
 #include <unistd.h>
-#include "GeneMap.H"
 #include "MappedOrthogroup.H"
 #include "MappedOrthogroupReader.H"
-
-MappedOrthogroupReader::MappedOrthogroupReader()
-{
-    persistentDebug = false;
-}
-
-MappedOrthogroupReader::~MappedOrthogroupReader()
-{
-}
 
 //This function reads the orthogroup mapping produced in any one of the PROPER, FILLED and UNFILLED formats.
 //We are essentialy interested in the first two columns
@@ -164,20 +154,6 @@ MappedOrthogroupReader::getMappedOrthogroup(const char* geneName, const char* sp
     return og;
 }
 
-/*
-STRINTMAP* 
-MappedOrthogroupReader::getOrtholog(const char* srcSpecName, const char* geneName, const char* targetSpecName)
-{
-    int ogid=getMappedOrthogroupID(geneName,srcSpecName);
-    if(ogid==-1)
-    {
-        return NULL;
-    }
-    MappedOrthogroup* mgrp=orthogroupSet[ogid];
-    STRINTMAP* orthohits=mgrp->getSpeciesHitsForGene(srcSpecName,targetSpecName,geneName);
-    return orthohits;
-}*/
-
 int
 MappedOrthogroupReader::addMembers(char* abuffer, MappedOrthogroup* ogrp)
 {
@@ -216,16 +192,7 @@ MappedOrthogroupReader::addMembers(char* abuffer, MappedOrthogroup* ogrp)
             tok=end;
         }
     }
-    /*if (debug || persistentDebug)
-    {
-        cout << "Calling setMembers... specGeneMap:" << endl;
-        for (auto keyval : specGeneMap)
-        {
-            cout << "  " << keyval.first << "  " << keyval.second << endl;
-        }
-    }
-    ogrp->setMembers(specGeneMap);
-    specGeneMap.clear();*/
+
     return 0;
 }
 
@@ -240,27 +207,7 @@ MappedOrthogroupReader::generateGeneOrthoMap()
         MappedOrthogroup* og=oIter->second;
         //map<string,GeneMap*>& members=og->getOrthoMembers();
         vector<string>& members=og->getOrthoMembers();
-        /*
-        for(map<string,GeneMap*>::iterator sIter=members.begin();sIter!=members.end();sIter++)
-        {
-            map<string,map<string,STRINTMAP*>*>& genes=sIter->second->getGeneSet(); //geneSet
-            STRINTMAP* allgenesForSpecies=NULL;
-            if(geneOrthoMap.find(sIter->first)==geneOrthoMap.end())
-            {
-                allgenesForSpecies=new STRINTMAP;
-                geneOrthoMap[sIter->first]=allgenesForSpecies;
-            }
-            else
-            {
-                allgenesForSpecies=geneOrthoMap[sIter->first];
-            }
-            for(map<string,map<string,STRINTMAP*>*>::iterator gIter=genes.begin();gIter!=genes.end();gIter++)
-            {
-                (*allgenesForSpecies)[gIter->first]=oIter->first;  //geneOrthoMap[sIter->first][gIter->first]=oIter->first
-                cout << "OGID=" << oIter->first << " species=" << sIter->first << " member="<< gIter->first << endl;
-            }
-        }*/
-        for(int sIter=0;sIter<members.size();sIter++) //map<string,string>::iterator
+        for(int sIter=0;sIter<members.size();sIter++)
         {
             string speciesName=speciesIDNameMap[sIter];
             STRINTMAP* allgenesForSpecies=NULL;

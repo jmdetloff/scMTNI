@@ -12,27 +12,11 @@
  *   IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *   */
 #include "MetaMove.H"
-MetaMove::MetaMove()
-{
-}
-
-MetaMove::~MetaMove()
-{
-	//conditionSet.clear();
-	srcWeight.clear();
-}
 
 int 
 MetaMove::setScoreImprovement(double aVal)
 {
 	scoreDelta=aVal;
-	return 0;
-}
-
-int
-MetaMove::setSrcMBScore(double aScore)
-{
-	mbscore=aScore;
 	return 0;
 }
 
@@ -91,16 +75,6 @@ MetaMove::setConditionSetInd(int aind)
 }
 
 int 
-MetaMove::setSrcWeight(unordered_map<int,double>& awt)
-{
-	for(auto wIter=awt.begin();wIter!=awt.end();wIter++)
-	{
-		srcWeight[wIter->first]=wIter->second;
-	}
-	return 0;
-}
-
-int 
 MetaMove::getSrcVertex()
 {
 	return src;
@@ -124,22 +98,10 @@ MetaMove::getTargetID()
     return targeti;
 }
 
-/*INTINTMAP&
-MetaMove::getConditionSet()
-{
-	return conditionSet;
-}*/
-
 int
 MetaMove::getConditionSetInd()
 {	
 	return conditionSetInd;
-}
-
-double 
-MetaMove::getSrcMBScore()
-{
-	return mbscore;
 }
 
 double
@@ -148,16 +110,8 @@ MetaMove::getTargetMBScore()
 	return targetMBScore;
 }
 
-
 double 
 MetaMove::getScoreImprovement()
 {
 	return scoreDelta;
 }
-
-unordered_map<int,double>&
-MetaMove::getSrcWeight()
-{
-	return srcWeight;
-}
-
