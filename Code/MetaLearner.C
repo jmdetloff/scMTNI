@@ -186,6 +186,10 @@ int MetaLearner::init()
 
 void MetaLearner::initSpeciesData(string speciesName, string tableFileName, string outputLoc, string motifNetwork)
 {
+    char foldOutputDirCmd[1024];
+    sprintf(foldOutputDirCmd, "mkdir -p %s", outputLoc.c_str());
+    system(foldOutputDirCmd);
+
     PotentialManager *potMgr = new PotentialManager;
     potMgr->loadEvidenceFromTable(tableFileName, variableList);
 
