@@ -43,7 +43,6 @@ SpeciesDistance::setProot(double aVal)
 void
 SpeciesDistance::setSpeciesNameIDMap(unordered_map<string,int>& spNameIDMap){
     speciesNameIDMap = spNameIDMap;
-    return 0;
 }
 
 void
